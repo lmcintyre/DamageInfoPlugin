@@ -1,0 +1,11 @@
+{
+  "Author": "perchbird",
+  "Name": "Damage Info Plugin",
+  "Description": "Configurable UI options for damage. /dmginfo displays the UI.",
+  "InternalName": "damageInfoPlugin",
+  "AssemblyVersion": "0.0.1",
+  "RepoUrl": "https://github.com/lmcintyre/DamageInfoPlugin",
+  "ApplicableVersion": "any",
+  "Tags": ["damage", "UI"],
+  "DalamudApiLevel": 1
+}
