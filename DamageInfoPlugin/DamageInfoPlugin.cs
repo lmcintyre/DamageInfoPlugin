@@ -1,22 +1,46 @@
 ﻿using Dalamud.Game.Command;
 using Dalamud.Plugin;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Numerics;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Dalamud.Game;
+using System.Threading;
 using Dalamud.Hooking;
-using Lumina.Excel.GeneratedSheets;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 
 namespace DamageInfoPlugin
 {
+	public enum ActionEffectType : byte
+	{
+		Nothing = 0,
+		Miss = 1,
+		FullResist = 2,
+		Damage = 3,
+		Heal = 4,
+		BlockedDamage = 5,
+		ParriedDamage = 6,
+		Invulnerable = 7,
+		NoEffectText = 8,
+		Unknown_0 = 9,
+		MpLoss = 10,
+		MpGain = 11,
+		TpLoss = 12,
+		TpGain = 13,
+		GpGain = 14,
+		ApplyStatusEffectTarget = 15,
+		ApplyStatusEffectSource = 16,
+		StatusNoEffect = 20,
+		StartActionCombo = 27,
+		ComboSucceed = 28,
+		Knockback = 33,
+		Mount = 40,
+		VFX = 59,
+	};
+
     // members suffixed with a number seem to be a duplicate
-	enum FlyTextKind {
+    public enum FlyTextKind {
         // val1 in serif font, text1 sans-serif as subtitle
         AutoAttack,
 
@@ -153,9 +177,7 @@ namespace DamageInfoPlugin
         CriticalDirectHit2,
 	}
 
-
-
-    enum DamageType {
+    public enum DamageType {
 		Unknown = 0,
 		Slashing = 1,
 		Piercing = 2,
@@ -177,9 +199,25 @@ namespace DamageInfoPlugin
 		public float unk3;
 	}
 
+	public struct EffectEntry
+	{
+		public ActionEffectType type;
+		public byte param0;
+		public byte param1;
+		public byte param2;
+		public byte mult;
+		public byte flags;
+		public ushort value;
+
+		public override string ToString() {
+			return
+				$"Type: {type}, p0: {param0}, p1: {param1}, p2: {param2}, mult: {mult}, flags: {flags} | {Convert.ToString(flags, 2)}, value: {value}";
+		}
+	}
+
     public class DamageInfoPlugin : IDalamudPlugin
     {
-        public string Name => "Damage Info";
+	    public string Name => "Damage Info";
 
         private const string commandName = "/dmginfo";
 
@@ -194,17 +232,26 @@ namespace DamageInfoPlugin
         private Hook<ReceiveActionEffectDelegate> receiveActionEffectHook;
 
         private Dictionary<uint, DamageType> actionToDamageTypeDict;
-        // private Dictionary<uint, DamageType> weaponToDamageTypeDict;
+        private ConcurrentDictionary<uint, List<Tuple<long, DamageType>>> futureFlyText;
+
+        private Timer cleanupTimer;
 
         public void Initialize(DalamudPluginInterface pluginInterface)
         {
             pi = pluginInterface;
 
+            configuration = pi.GetPluginConfig() as Configuration ?? new Configuration();
+            configuration.Initialize(pi, this);
+            ui = new PluginUI(configuration, this);
+
+            pi.CommandManager.AddHandler(commandName, new CommandInfo(OnCommand)
+	            { HelpMessage = "Display the Damage Info configuration interface."});
+
             actionToDamageTypeDict = new Dictionary<uint, DamageType>();
-            // weaponToDamageTypeDict = new Dictionary<uint, DamageType>();
+            futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType>>>();
+            cleanupTimer = new Timer(Cleanup, null, 0, 5000);
 
             var actionSheet = pi.Data.GetExcelSheet<Action>();
-            var itemSheet = pi.Data.GetExcelSheet<Item>();
             foreach (var row in actionSheet.ToList()) {
 	            DamageType tmpType = (DamageType) row.AttackType.Row;
 	            if (tmpType != DamageType.Magic && tmpType != DamageType.Darkness)
@@ -212,26 +259,7 @@ namespace DamageInfoPlugin
             
                 actionToDamageTypeDict.Add(row.RowId, tmpType);
             }
-				
-
-            // foreach (var row in itemSheet.ToList()) {
-	           //  if (row.EquipSlotCategory.Value.RowId == 1 || row.EquipSlotCategory.Value.RowId == 13) {
-		          //   weaponToDamageTypeDict.Add(row.RowId, (DamageType)row.);
-            //     }
-            // }
-
-            // PluginLog.Log($"{pi.ClientState.LocalPlayer.Address}");
-
-	        configuration = pi.GetPluginConfig() as Configuration ?? new Configuration();
-            configuration.Initialize(pi);
-
-            ui = new PluginUI(configuration, this);
-
-            pi.CommandManager.AddHandler(commandName, new CommandInfo(OnCommand)
-            {
-                HelpMessage = "Display the Damage Info configuration interface."
-            });
-
+            
             IntPtr createFlyTextFuncPtr = pi.TargetModuleScanner.ScanText(
 	            "48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 40 48 63 FA 45 8B F0 48 8B F1 83 FF 34 7C 13 33 C0 48 8B 74 24 ?? 48 8B 7C 24 ?? 48 83 C4 40 41 5E C3");
             createFlyTextHook = new Hook<CreateFlyTextDelegate>(createFlyTextFuncPtr, (CreateFlyTextDelegate) CreateFlyText);
@@ -246,8 +274,9 @@ namespace DamageInfoPlugin
             pi.UiBuilder.OnOpenConfigUi += (sender, args) => DrawConfigUI();
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
+	        cleanupTimer.Dispose();
+	        Cleanup(null);
             ui.Dispose();
 
             createFlyTextHook.Disable();
@@ -290,24 +319,50 @@ namespace DamageInfoPlugin
 	        IntPtr text2,
 	        float unk3
         ) {
-	        string strText1, strText2;
-	        if (Hijack) {
-		        strText1 = Marshal.PtrToStringAnsi(hijackStruct.text1);
-		        strText2 = Marshal.PtrToStringAnsi(hijackStruct.text2);
+			uint tColor = color;
 
-		        PluginLog.Log($"flytext created: kind: {hijackStruct.kind}, val1: {hijackStruct.val1}, val2: {hijackStruct.val2}, color: {hijackStruct.color:X}, icon: {hijackStruct.icon}");
-		        PluginLog.Log($"text1: {strText1} | text2: {strText2}");
+	        if (Hijack)
+	        {
+		        string hjText1 = Marshal.PtrToStringAnsi(hijackStruct.text1);
+		        string hjText2 = Marshal.PtrToStringAnsi(hijackStruct.text2);
+
+		        FlyTextLog($"flytext hijacked: kind: {hijackStruct.kind}, val1: {hijackStruct.val1}, val2: {hijackStruct.val2}, color: {hijackStruct.color:X}, icon: {hijackStruct.icon}");
+		        FlyTextLog($"text1: {hjText1} | text2: {hjText2}");
 
 		        return createFlyTextHook.Original(flyTextMgr, hijackStruct.kind, hijackStruct.val1, hijackStruct.val2, hijackStruct.text1, hijackStruct.color, hijackStruct.icon, hijackStruct.text2, unk3);
+	        }
+
+	        FlyTextKind ftKind = (FlyTextKind)kind;
+
+	        // wrap this here to lower overhead when not logging
+	        if (configuration.FlyTextLogEnabled)
+	        {
+		        string strText1 = Marshal.PtrToStringAnsi(text1);
+		        string strText2 = Marshal.PtrToStringAnsi(text2);
+
+		        strText1 = strText1?.Replace("%", "%%");
+		        strText2 = strText2?.Replace("%", "%%");
+
+		        FlyTextLog($"flytext created: kind: {ftKind}, val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
+		        FlyTextLog($"text1: {strText1} | text2: {strText2}");
+	        }
+
+            if (configuration.TextColoringEnabled && TryGetFlyTextDamageType(val1, out DamageType dmgType)) {
+	            switch (dmgType)
+	            {
+		            case DamageType.Physical:
+			            tColor = Color3ToUint(configuration.PhysicalColor);
+			            break;
+		            case DamageType.Magic:
+			            tColor = Color3ToUint(configuration.MagicColor);
+			            break;
+		            case DamageType.Darkness:
+			            tColor = Color3ToUint(configuration.DarknessColor);
+			            break;
+	            }
             }
-
-	        strText1 = Marshal.PtrToStringAnsi(text1);
-	        strText2 = Marshal.PtrToStringAnsi(text2);
-            //Marshal.StringToHGlobalAnsi()
-			PluginLog.Log($"flytext created: kind: {kind}, val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
-            PluginLog.Log($"text1: {strText1} | text2: {strText2}");
-
-			return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, color, icon, text2, unk3);
+            
+            return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
         }
 
         public unsafe delegate void ReceiveActionEffectDelegate(IntPtr unk1, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
@@ -315,12 +370,138 @@ namespace DamageInfoPlugin
         public unsafe void ReceiveActionEffect(IntPtr unk1, IntPtr unk2, IntPtr unk3,
 										        IntPtr packet,
 										        IntPtr unk4, IntPtr unk5, IntPtr unk6) {
-			PluginLog.Log($"packet at {packet.ToInt64():X}");
+
+            // no log, no processing... just get him outta here
+	        if (!configuration.EffectLogEnabled && !configuration.TextColoringEnabled) {
+		        receiveActionEffectHook.Original(unk1, unk2, unk3, packet, unk4, unk5, unk6);
+		        return;
+	        }
+
+	        EffectLog($"packet at {packet.ToInt64():X}");
 			uint id = *((uint*)packet.ToPointer() + 0x2);
-            PluginLog.Log($"action id {id}");
+			ushort op = *((ushort*) packet.ToPointer() - 0x7);
+            EffectLog($"action id {id}, opcode: {op:X}, effects:");
 
+            IntPtr effectsPtr = packet + 0x2A;
+            List<EffectEntry> entries = new List<EffectEntry>(8);
 
-			receiveActionEffectHook.Original(unk1, unk2, unk3, packet, unk4, unk5, unk6);
+            for (int i = 0; i < 8; i++) {
+                entries.Add(*(EffectEntry*)effectsPtr);
+	            effectsPtr += 8;
+            }
+            // EffectLog($"loaded 8 effects...");
+
+            // attempt to read more effects
+            // EffectLog("attempting to read more effects...");
+            for (int i = 0; i < 4; i++) {
+	            EffectEntry testEntry = *(EffectEntry*) effectsPtr;
+                // EffectLog($"first entry in set {i + 1} has type {testEntry.type}");
+	            if (testEntry.type != ActionEffectType.Nothing) {
+		            for (int j = 0; j < 8; j++) {
+			            entries.Add(*(EffectEntry*)effectsPtr);
+			            effectsPtr += 8;
+		            }
+	            } else {
+		            break;
+	            }
+            }
+
+            EffectLog($"loaded {entries.Count} entries...");
+
+            for (int i = 0; i < entries.Count; i++) {
+	            // if (entries[i].type == ActionEffectType.Nothing)
+		           //  continue;
+
+		        uint tDmg = entries[i].value;
+	            if (entries[i].mult != 0)
+		            tDmg += (uint) ushort.MaxValue * entries[i].mult;
+
+                if (entries[i].type == ActionEffectType.Damage ||
+                    entries[i].type == ActionEffectType.BlockedDamage ||
+                    entries[i].type == ActionEffectType.ParriedDamage ||
+                    entries[i].type == ActionEffectType.Miss) {
+
+                    EffectLog($"{entries[i]}");
+
+                    // flyTextToProcessDict[tDmg] = actionToDamageTypeDict[id];
+                    if (configuration.TextColoringEnabled)
+						AddToFutureFlyText(tDmg, actionToDamageTypeDict[id]);
+                }
+            }
+            receiveActionEffectHook.Original(unk1, unk2, unk3, packet, unk4, unk5, unk6);
+        }
+
+        private void EffectLog(string str)
+        {
+	        if (configuration.EffectLogEnabled)
+		        PluginLog.Log($"[effect] {str}");
+        }
+
+        private void FlyTextLog(string str)
+        {
+	        if (configuration.FlyTextLogEnabled)
+		        PluginLog.Log($"[flytext] {str}");
+        }
+
+        private bool TryGetFlyTextDamageType(uint dmg, out DamageType type) {
+	        type = DamageType.Unknown;
+	        if (!futureFlyText.TryGetValue(dmg, out var list)) return false;
+
+	        if (list.Count == 0)
+		        return false;
+
+	        var item = list[0];
+			foreach (var tuple in list)
+			    if (tuple.Item1 < item.Item1)
+			        item = tuple;
+	        list.Remove(item);
+	        type = item.Item2;
+
+	        return true;
+        }
+
+        private void AddToFutureFlyText(uint dmg, DamageType type) {
+	        long ms = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
+	        var toInsert = new Tuple<long, DamageType>(ms, type);
+
+	        if (futureFlyText.TryGetValue(dmg, out var list)) {
+		        if (list != null) {
+			        list.Add(toInsert);
+			        return;
+		        }
+	        }
+
+	        var tmpList = new List<Tuple<long, DamageType>> {toInsert};
+	        futureFlyText[dmg] = tmpList;
+        }
+
+        // Not all effect packets end up being flytext
+        // so we have to clean up the orphaned entries here
+        private void Cleanup(object obj) {
+            FlyTextLog($"pre-cleanup: {futureFlyText.Values.Count}");
+	        long ms = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
+
+	        for (int i = 0; i < futureFlyText.Keys.Count; i++) {
+		        uint key = futureFlyText.Keys.ElementAt(i);
+		        for (int j = 0; j < futureFlyText[key].Count; j++) {
+			        long diff = ms - futureFlyText[key][j].Item1;
+			        if (diff > 5000) {
+				        futureFlyText[key].Remove(futureFlyText[key][j]);
+				        j--;
+			        }
+		        }
+                if (futureFlyText[key].Count == 0)
+                    futureFlyText.TryRemove(key, out var unused);
+	        }
+	        FlyTextLog($"post-cleanup: {futureFlyText.Values.Count}");
+        }
+
+        public void ClearFlyTextQueue() {
+			// FlyTextLog($"clearing flytext queue of {flyTextToProcessDict.Count} items...");
+			// flyTextToProcessDict.Clear();
+
+            FlyTextLog($"clearing flytext queue of {futureFlyText.Values.Count} items...");
+            futureFlyText.Clear();
         }
 
         public static UInt32 Color3ToUint(Vector3 color)

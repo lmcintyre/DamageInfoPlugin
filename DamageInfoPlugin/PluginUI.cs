@@ -121,21 +121,33 @@ namespace DamageInfoPlugin
                 return;
             }
 
-            ImGui.SetNextWindowSize(new Vector2(232, 75), ImGuiCond.Always);
-            if (ImGui.Begin("A Wonderful Configuration Window", ref this.settingsVisible,
+            ImGui.SetNextWindowSize(new Vector2(232, 120), ImGuiCond.Always);
+            if (ImGui.Begin("Damage Info Config", ref settingsVisible,
                 ImGuiWindowFlags.NoResize |
                 ImGuiWindowFlags.NoCollapse | 
                 ImGuiWindowFlags.NoScrollbar | 
                 ImGuiWindowFlags.NoScrollWithMouse
                 ))
             {
-                // can't ref a property, so use a local copy
-                var configValue = this.configuration.Enabled;
-                if (ImGui.Checkbox("Enabled: ", ref configValue))
+                var effectLogConfigValue = this.configuration.EffectLogEnabled;
+                if (ImGui.Checkbox("EffectLog Enabled", ref effectLogConfigValue))
                 {
-                    this.configuration.Enabled = configValue;
-                    // can save immediately on change, if you don't want to provide a "Save and Close" button
-                    this.configuration.Save();
+                    configuration.EffectLogEnabled = effectLogConfigValue;
+                    configuration.Save();
+                }
+
+                var flytextLogConfigValue = configuration.FlyTextLogEnabled;
+                if (ImGui.Checkbox("FlyTextLog Enabled", ref flytextLogConfigValue))
+                {
+	                configuration.FlyTextLogEnabled = flytextLogConfigValue;
+	                configuration.Save();
+                }
+
+                var colorTextConfigValue = configuration.TextColoringEnabled;
+                if (ImGui.Checkbox("Text Coloring Enabled", ref colorTextConfigValue))
+                {
+	                configuration.TextColoringEnabled = colorTextConfigValue;
+                    configuration.Save();
                 }
             }
             ImGui.End();
