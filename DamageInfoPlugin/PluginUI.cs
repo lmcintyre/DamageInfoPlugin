@@ -91,15 +91,15 @@ namespace DamageInfoPlugin
 			        uint tVal1 = (uint)val1;
 			        uint tVal2 = (uint)val2;
 			        uint tIcon = (uint)icon;
-
+		        
 			        uint tColor = DamageInfoPlugin.Color3ToUint(color);
-
+		        
 			        string test1 = "test1";
 			        string test2 = "test2";
-
+		        
 			        IntPtr tText1 = Marshal.StringToHGlobalAnsi(test1);
 			        IntPtr tText2 = Marshal.StringToHGlobalAnsi(test2);
-
+		        
 			        damageInfoPlugin.hijackStruct = new HijackStruct() {
 				        kind = tKind,
 				        val1 = tVal1,

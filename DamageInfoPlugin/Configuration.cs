@@ -18,7 +18,7 @@ namespace DamageInfoPlugin
 	        get => _TextColoringEnabled;
 	        set {
                 if (value == false)
-                    plugin.ClearFlyTextQueue();
+                    plugin?.ClearFlyTextQueue();
                 _TextColoringEnabled = value;
 	        }
         }
@@ -33,10 +33,10 @@ namespace DamageInfoPlugin
         [NonSerialized]
         private DamageInfoPlugin plugin;
 
-        public void Initialize(DalamudPluginInterface pluginInterface, DamageInfoPlugin plugin)
+        public void Initialize(DalamudPluginInterface pluginInterface, DamageInfoPlugin dmgPlugin)
         {
             this.pluginInterface = pluginInterface;
-            this.plugin = plugin;
+            this.plugin = dmgPlugin;
         }
 
         public void Save()
