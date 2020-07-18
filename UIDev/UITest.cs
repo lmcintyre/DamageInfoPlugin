@@ -14,9 +14,10 @@ namespace UIDev
 
         private TextureWrap goatImage;
         private SimpleImGuiScene scene;
-        private Vector3 baseColor = new Vector3();
 
-        private int kind, val1, val2, color, icon;
+        Vector4 testPhys = new Vector4(1, 0, 0, 1);
+        Vector4 testMag = new Vector4(0, 0, 1, 1);
+        Vector4 testDark = new Vector4(1, 0, 1, 1);
 
         public void Initialize(SimpleImGuiScene scene)
         {
@@ -48,7 +49,7 @@ namespace UIDev
         {
             DrawMainWindow();
             DrawSettingsWindow();
-
+            
             if (!Visible)
             {
                 this.scene.ShouldQuit = true;
@@ -59,15 +60,15 @@ namespace UIDev
         private bool visible = false;
         public bool Visible
         {
-            get { return this.visible; }
-            set { this.visible = value; }
+            get => visible;
+            set => visible = value;
         }
 
         private bool settingsVisible = false;
         public bool SettingsVisible
         {
-            get { return this.settingsVisible; }
-            set { this.settingsVisible = value; }
+            get => settingsVisible;
+            set => settingsVisible = value;
         }
 
         // this is where you'd have to start mocking objects if you really want to match
@@ -91,51 +92,92 @@ namespace UIDev
                 {
                     SettingsVisible = true;
                 }
-
-                ImGui.Spacing();
-                ImGui.InputInt("kind", ref kind);
-                ImGui.Spacing();
-                ImGui.InputInt("val1", ref val1);
-                ImGui.Spacing();
-                ImGui.InputInt("val2", ref val2);
-                ImGui.Spacing();
-                ImGui.InputFloat3("color", ref baseColor);
-                ImGui.Spacing();
-                ImGui.InputInt("icon", ref icon);
-
-                if (ImGui.Button($"Show flytext"))
-                {
-					System.Diagnostics.Debug.WriteLine($"k: {kind} val1: {val1} etc");
-                }
-
             }
             ImGui.End();
         }
 
+        /*
+        // retired before it saw the light of day...
+        // goodbye old friend
+        private void DrawColorPickingWindow() {
+
+	        if (!ShouldShowColorWindow)
+		        return;
+
+	        Vector4 thisColor;
+	        string kind;
+	        switch (ColorWindowType) {
+                case 1:
+	                thisColor = testPhys;
+	                kind = "Physical";
+	                break;
+                case 2:
+	                thisColor = testMag;
+	                kind = "Magical";
+                    break;
+                case 3:
+	                thisColor = testDark;
+	                kind = "Darkness";
+                    break;
+                default:
+	                return;
+	        }
+
+	        ImGui.SetNextWindowSize(new Vector2(300, 300), ImGuiCond.Always);
+	        if (ImGui.Begin($"{kind} Color Picker", ref shouldShowColorWindow, ImGuiWindowFlags.Modal)) {
+		        if (ImGui.ColorPicker4($"{kind} Color", ref thisColor, ImGuiColorEditFlags.Float)) {
+		            System.Diagnostics.Debug.WriteLine($"{thisColor}");
+		            System.Diagnostics.Debug.WriteLine($"{ImGui.GetColorU32(thisColor)}");
+		        }
+            }
+
+	        switch (ColorWindowType) {
+                case 1:
+	                testPhys = thisColor;
+	                break;
+                case 2:
+	                testMag = thisColor;
+	                break;
+                case 3:
+	                testDark = thisColor;
+	                break;
+	        }
+	        ImGui.End();
+        }*/
+
         public void DrawSettingsWindow()
         {
             if (!SettingsVisible)
-            {
                 return;
-            }
 
-            ImGui.SetNextWindowSize(new Vector2(232, 75), ImGuiCond.FirstUseEver);
+            ImGui.SetNextWindowSize(new Vector2(370, 195), ImGuiCond.Always);
             if (ImGui.Begin("A Wonderful Configuration Window", ref this.settingsVisible,
-                // ImGuiWindowFlags.AlwaysAutoResize |
-                // ImGuiWindowFlags.NoResize |
-                // ImGuiWindowFlags.NoCollapse |
-                ImGuiWindowFlags.NoScrollbar |
-                ImGuiWindowFlags.NoScrollWithMouse
+	            ImGuiWindowFlags.NoScrollbar |
+					ImGuiWindowFlags.NoScrollWithMouse
                 )) {
-	            // ImGui.ColorEdit3("test", ref colorOut);
-                if (ImGui.ColorPicker3("test2", ref baseColor,
-	                ImGuiColorEditFlags.Float
-	                )) {
-                    System.Diagnostics.Debug.WriteLine($"{baseColor}");
-                    System.Diagnostics.Debug.WriteLine($"{Color3ToUint(baseColor)}");
-                }
-	            
-                if (ImGui.Checkbox("Random Config Bool", ref this.fakeConfigBool))
+
+	            // if (ImGui.Button("Physical Color")) {
+		           //  ShouldShowColorWindow = true;
+		           //  ColorWindowType = 1;
+	            // }
+
+	            ImGui.ColorEdit4("Physical Color", ref testPhys);
+                ImGui.ColorEdit4("Magical Color", ref testMag);
+	            ImGui.ColorEdit4("Darkness Color", ref testDark);
+	            ImGui.Checkbox("pen15", ref fakeConfigBool);
+	            ImGui.Checkbox("pen16", ref fakeConfigBool);
+	            ImGui.Checkbox("pen17", ref fakeConfigBool);
+	            // ImGui.SameLine();
+	            // ImGui.ColorButton("Darkness Color", testDark);
+
+                // if (ImGui.ColorPicker3("test2", ref baseColor,
+                //  ImGuiColorEditFlags.Float
+                //  )) {
+                //     System.Diagnostics.Debug.WriteLine($"{baseColor}");
+                //     System.Diagnostics.Debug.WriteLine($"{Color3ToUint(baseColor)}");
+                // }
+
+                if (ImGui.Checkbox("Random Config Bool", ref fakeConfigBool))
                 {
                     // nothing to do in a fake ui!
                 }
@@ -143,26 +185,5 @@ namespace UIDev
             ImGui.End();
         }
         #endregion
-
-        private static UInt32 Color3ToUint(Vector3 color)
-        {
-	        byte[] tmp = new byte[4];
-	        tmp[0] = (byte)Math.Truncate(color.X * 255); //r
-	        tmp[1] = (byte)Math.Truncate(color.Y * 255); //g
-	        tmp[2] = (byte)Math.Truncate(color.Z * 255); //b
-	        tmp[3] = 0xFF;
-
-	        return BitConverter.ToUInt32(tmp, 0);
-        }
-
-        private static UInt32 Color4ToUint(Vector4 color) {
-	        byte[] tmp = new byte[4];
-	        tmp[0] = (byte)Math.Truncate(color.X * 255); //r
-	        tmp[1] = (byte)Math.Truncate(color.Y * 255); //g
-	        tmp[2] = (byte)Math.Truncate(color.Z * 255); //b
-	        tmp[3] = (byte)Math.Truncate(color.W * 255); //a
-
-	        return BitConverter.ToUInt32(tmp, 0);
-        }
     }
 }

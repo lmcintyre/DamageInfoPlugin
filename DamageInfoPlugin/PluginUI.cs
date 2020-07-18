@@ -13,24 +13,23 @@ namespace DamageInfoPlugin
         private DamageInfoPlugin damageInfoPlugin;
 
         private int kind, val1, val2, icon;
-        private Vector3 color;
+        private Vector4 color;
 
         // this extra bool exists for ImGui, since you can't ref a property
         private bool visible = false;
         public bool Visible
         {
-            get { return this.visible; }
-            set { this.visible = value; }
+            get => visible;
+            set => visible = value;
         }
 
         private bool settingsVisible = false;
         public bool SettingsVisible
         {
-            get { return this.settingsVisible; }
-            set { this.settingsVisible = value; }
+            get => settingsVisible;
+            set => settingsVisible = value;
         }
 
-        // passing in the image here just for simplicity
         public PluginUI(Configuration configuration, DamageInfoPlugin damageInfoPlugin)
         {
             this.configuration = configuration;
@@ -57,10 +56,7 @@ namespace DamageInfoPlugin
 
         public void DrawMainWindow()
         {
-	        if (!Visible)
-	        {
-		        return;
-	        }
+	        if (!Visible) return;
 
 	        ImGui.SetNextWindowSize(new Vector2(400, 300), ImGuiCond.FirstUseEver);
 	        ImGui.SetNextWindowSizeConstraints(new Vector2(400, 200), new Vector2(float.MaxValue, float.MaxValue));
@@ -82,7 +78,7 @@ namespace DamageInfoPlugin
 		        ImGui.Spacing();
 		        ImGui.InputInt("val2", ref val2);
 		        ImGui.Spacing();
-		        ImGui.InputFloat3("color", ref color);
+		        ImGui.InputFloat4("color", ref color);
 		        ImGui.Spacing();
 		        ImGui.InputInt("icon", ref icon);
 
@@ -92,7 +88,7 @@ namespace DamageInfoPlugin
 			        uint tVal2 = (uint)val2;
 			        uint tIcon = (uint)icon;
 		        
-			        uint tColor = DamageInfoPlugin.Color3ToUint(color);
+			        uint tColor = ImGui.GetColorU32(color);
 		        
 			        string test1 = "test1";
 			        string test2 = "test2";
@@ -116,34 +112,53 @@ namespace DamageInfoPlugin
 
         public void DrawSettingsWindow()
         {
-            if (!SettingsVisible)
-            {
-                return;
-            }
+            if (!SettingsVisible) return;
 
-            ImGui.SetNextWindowSize(new Vector2(232, 120), ImGuiCond.Always);
+            ImGui.SetNextWindowSize(new Vector2(370, 195), ImGuiCond.Always);
             if (ImGui.Begin("Damage Info Config", ref settingsVisible,
                 ImGuiWindowFlags.NoResize |
                 ImGuiWindowFlags.NoCollapse | 
                 ImGuiWindowFlags.NoScrollbar | 
                 ImGuiWindowFlags.NoScrollWithMouse
-                ))
-            {
-                var effectLogConfigValue = this.configuration.EffectLogEnabled;
-                if (ImGui.Checkbox("EffectLog Enabled", ref effectLogConfigValue))
+                )) {
+
+                // local copies of config properties
+	            var lPhys = configuration.PhysicalColor;
+	            var lMag = configuration.MagicColor;
+	            var lDark = configuration.DarknessColor;
+	            var effectLogConfigValue = configuration.EffectLogEnabled;
+	            var flytextLogConfigValue = configuration.FlyTextLogEnabled;
+	            var colorTextConfigValue = configuration.TextColoringEnabled;
+
+                if (ImGui.ColorEdit4("Physical Color", ref lPhys)) {
+				    configuration.PhysicalColor = lPhys;
+				    configuration.Save();
+				}
+
+				if (ImGui.ColorEdit4("Magical Color", ref lMag))
+				{
+					configuration.MagicColor = lMag;
+					configuration.Save();
+				}
+
+				if (ImGui.ColorEdit4("Darkness Color", ref lDark))
+				{
+					configuration.DarknessColor = lDark;
+					configuration.Save();
+				}
+
+                if (ImGui.Checkbox("EffectLog Enabled (Debug)", ref effectLogConfigValue))
                 {
                     configuration.EffectLogEnabled = effectLogConfigValue;
                     configuration.Save();
                 }
 
-                var flytextLogConfigValue = configuration.FlyTextLogEnabled;
-                if (ImGui.Checkbox("FlyTextLog Enabled", ref flytextLogConfigValue))
+                if (ImGui.Checkbox("FlyTextLog Enabled (Debug)", ref flytextLogConfigValue))
                 {
 	                configuration.FlyTextLogEnabled = flytextLogConfigValue;
 	                configuration.Save();
                 }
 
-                var colorTextConfigValue = configuration.TextColoringEnabled;
                 if (ImGui.Checkbox("Text Coloring Enabled", ref colorTextConfigValue))
                 {
 	                configuration.TextColoringEnabled = colorTextConfigValue;

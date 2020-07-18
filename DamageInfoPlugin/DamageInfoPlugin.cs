@@ -8,7 +8,9 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Dalamud.Game.Chat.SeStringHandling;
+using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Hooking;
+using ImGuiNET;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 
 namespace DamageInfoPlugin
@@ -43,7 +45,7 @@ namespace DamageInfoPlugin
     // members suffixed with a number seem to be a duplicate
     public enum FlyTextKind {
         // val1 in serif font, text1 sans-serif as subtitle
-        AutoAttack,
+        AutoAttack, // used for autoas and incoming DoT damage
  
         // val1 in serif font, text1 sans-serif as subtitle
         // does a bounce effect on appearance
@@ -95,7 +97,7 @@ namespace DamageInfoPlugin
         // sans-serif text2 next to serif val1 with all caps condensed font TP with text1 sans-serif as subtitle
         NamedTP,
  
-        NamedAttack2,
+        NamedAttack2,   // used on HoTs, heals
         NamedMP2,
         NamedTP2,
  
@@ -199,7 +201,7 @@ namespace DamageInfoPlugin
 		public IntPtr text2;
 		public float unk3;
 	}
- 
+    
 	public struct EffectEntry
 	{
 		public ActionEffectType type;
@@ -216,8 +218,10 @@ namespace DamageInfoPlugin
 		}
 	}
 
-    public class DamageInfoPlugin : IDalamudPlugin
-    {
+    public class DamageInfoPlugin : IDalamudPlugin {
+
+        // when a flytext 
+	    private const int CleanupInterval = 10000;
 	    public string Name => "Damage Info";
 
         private const string commandName = "/dmginfo";
@@ -234,14 +238,13 @@ namespace DamageInfoPlugin
         
         private Dictionary<uint, DamageType> actionToDamageTypeDict;
         private ConcurrentDictionary<uint, List<Tuple<long, DamageType>>> futureFlyText;
-        
-        // private Timer cleanupTimer;
+        private long lastCleanup;
 
         public void Initialize(DalamudPluginInterface pluginInterface)
         {
-	        actionToDamageTypeDict = new Dictionary<uint, DamageType>();
+            lastCleanup = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
+            actionToDamageTypeDict = new Dictionary<uint, DamageType>();
 	        futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType>>>();
-	        // cleanupTimer = new Timer(Cleanup, null, 0, 5000);
 
             pi = pluginInterface;
 
@@ -271,18 +274,20 @@ namespace DamageInfoPlugin
             receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, (ReceiveActionEffectDelegate) ReceiveActionEffect);
             receiveActionEffectHook.Enable();
 
+            PluginLog.Log($"player actor id: {pi.ClientState.LocalPlayer.ActorId}");
+
             pi.UiBuilder.OnBuildUi += DrawUI;
             pi.UiBuilder.OnOpenConfigUi += (sender, args) => DrawConfigUI();
         }
 
         public void Dispose() {
-            // cleanupTimer.Dispose();
-            // Cleanup(null);
+            ClearFlyTextQueue();
             createFlyTextHook.Disable();
             createFlyTextHook.Dispose();
             receiveActionEffectHook.Disable();
             receiveActionEffectHook.Dispose();
 
+            futureFlyText = null;
             actionToDamageTypeDict = null;
 
             ui.Dispose();
@@ -297,12 +302,20 @@ namespace DamageInfoPlugin
 
         private void DrawUI()
         {
-            this.ui.Draw();
+            ui.Draw();
         }
 
         private void DrawConfigUI()
         {
             ui.SettingsVisible = true;
+        }
+
+        public ulong GetCharacterActorId() {
+	        return (ulong) pi.ClientState.LocalPlayer.ActorId;
+        }
+
+        public bool IsInActorTable(uint id) {
+	        return pi.ClientState.Actors.Any(a => a.ActorId == id);
         }
 
         public unsafe delegate IntPtr CreateFlyTextDelegate(IntPtr flyTextMgr,
@@ -348,93 +361,163 @@ namespace DamageInfoPlugin
                 // var mgr = new SeStringManager(pi.Data);
                 // mgr.Parse()
 
-
                 FlyTextLog($"flytext created: kind: {ftKind}, val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
 		        FlyTextLog($"text1: {strText1} | text2: {strText2}");
 	        }
-   
-            if (configuration.TextColoringEnabled && TryGetFlyTextDamageType(val1, out DamageType dmgType)) {
-	            switch (dmgType)
-	            {
-		            case DamageType.Physical:
-			            tColor = Color3ToUint(configuration.PhysicalColor);
-			            break;
-		            case DamageType.Magic:
-			            tColor = Color3ToUint(configuration.MagicColor);
-			            break;
-		            case DamageType.Darkness:
-			            tColor = Color3ToUint(configuration.DarknessColor);
-			            break;
-	            }
+
+	        if (configuration.TextColoringEnabled && TryGetFlyTextDamageType(val1, out DamageType dmgType))
+	        {
+                Cleanup();
+		        if (ftKind == FlyTextKind.AutoAttack
+		            || ftKind == FlyTextKind.CriticalHit
+		            || ftKind == FlyTextKind.DirectHit
+		            || ftKind == FlyTextKind.CriticalDirectHit
+		            || ftKind == FlyTextKind.NamedAttack
+		            || ftKind == FlyTextKind.NamedDirectHit
+		            || ftKind == FlyTextKind.NamedCriticalHit
+		            || ftKind == FlyTextKind.NamedCriticalDirectHit
+				) {
+	                switch (dmgType)
+			        {
+				        case DamageType.Physical:
+					        tColor = ImGui.GetColorU32(configuration.PhysicalColor);
+					        break;
+				        case DamageType.Magic:
+					        tColor = ImGui.GetColorU32(configuration.MagicColor);
+                            break;
+				        case DamageType.Darkness:
+					        tColor = ImGui.GetColorU32(configuration.DarknessColor);
+                            break;
+			        }
+		        }
             }
-            
+
             return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
         }
    
-        public unsafe delegate void ReceiveActionEffectDelegate(IntPtr unk1, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
+        public unsafe delegate void ReceiveActionEffectDelegate(ulong sourceId, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
    
-        public unsafe void ReceiveActionEffect(IntPtr unk1, IntPtr unk2, IntPtr unk3,
+        public unsafe void ReceiveActionEffect(ulong sourceId, IntPtr unk2, IntPtr unk3,
 										        IntPtr packet,
 										        IntPtr unk4, IntPtr unk5, IntPtr unk6) {
    
             // no log, no processing... just get him outta here
 	        if (!configuration.EffectLogEnabled && !configuration.TextColoringEnabled) {
-		        receiveActionEffectHook.Original(unk1, unk2, unk3, packet, unk4, unk5, unk6);
+		        receiveActionEffectHook.Original(sourceId, unk2, unk3, packet, unk4, unk5, unk6);
 		        return;
 	        }
+
+            // EffectLog($"p1: {source.ToInt64():X}");
+            // EffectLog($"p2: {unk2.ToInt64():X}");
+            // EffectLog($"p3: {unk3.ToInt64():X}");
+            // EffectLog($"p4: {unk4.ToInt64():X}");
+            // EffectLog($"p5: {unk5.ToInt64():X}");
+            // EffectLog($"p6: {unk6.ToInt64():X}");
    
 	        EffectLog($"packet at {packet.ToInt64():X}");
 			uint id = *((uint*)packet.ToPointer() + 0x2);
 			ushort op = *((ushort*) packet.ToPointer() - 0x7);
-            EffectLog($"action id {id}, opcode: {op:X}, effects:");
+            EffectLog($"--- source actor: {sourceId}, action id {id}, opcode: {op:X} ---");
    
             IntPtr effectsPtr = packet + 0x2A;
             List<EffectEntry> entries = new List<EffectEntry>(8);
    
             for (int i = 0; i < 8; i++) {
                 entries.Add(*(EffectEntry*)effectsPtr);
-	            effectsPtr += 8;
+                EffectLog($"{entries[entries.Count - 1]}");
+                effectsPtr += 8;
             }
-            // EffectLog($"loaded 8 effects...");
+
+            EffectLog($"base entries loaded, next8:");
+            WriteNextEight(effectsPtr);
    
-            // attempt to read more effects
-            // EffectLog("attempting to read more effects...");
-            for (int i = 0; i < 4; i++) {
-	            EffectEntry testEntry = *(EffectEntry*) effectsPtr;
-                // EffectLog($"first entry in set {i + 1} has type {testEntry.type}");
-	            if (testEntry.type != ActionEffectType.Nothing) {
-		            for (int j = 0; j < 8; j++) {
-			            entries.Add(*(EffectEntry*)effectsPtr);
-			            effectsPtr += 8;
-		            }
-	            } else {
+            // attempt to read more effects up to the maximum for effect packets
+            for (int i = 0; i < 31; i++) {
+	            if (IsEndOfEffects(effectsPtr, entries.Count))
 		            break;
+
+	            for (int j = 0; j < 8; j++) {
+		            entries.Add(*(EffectEntry*)effectsPtr);
+		            EffectLog($"{entries[entries.Count - 1]}");
+                    effectsPtr += 8;
 	            }
+                EffectLog($"read another set, next8:");
+                WriteNextEight(effectsPtr);
             }
-   
-            EffectLog($"loaded {entries.Count} entries...");
-   
+
+            EffectLog($"{entries.Count} effects");
+
+            // EffectLog($"loading targets, next8:");
+            // WriteNextEight(effectsPtr);
+            effectsPtr += 6;
+            int numTargets = entries.Count == 8 ? 1 : entries.Count / 8;
+            ulong[] targets = new ulong[numTargets];
+			
+            for (int i = 0; i < numTargets; i++) {
+	            targets[i] = *(ulong*) effectsPtr;
+	            EffectLog($"targets: {targets[i]}");
+                effectsPtr += 8;
+            }
+
+            // EffectLog($"loaded {entries.Count} entries...");
             for (int i = 0; i < entries.Count; i++) {
 	            // if (entries[i].type == ActionEffectType.Nothing)
 		           //  continue;
-   
+		        ulong tTarget = targets[i / 8];
 		        uint tDmg = entries[i].value;
 	            if (entries[i].mult != 0)
 		            tDmg += (uint) ushort.MaxValue * entries[i].mult;
-   
-                if (entries[i].type == ActionEffectType.Damage ||
-                    entries[i].type == ActionEffectType.BlockedDamage ||
-                    entries[i].type == ActionEffectType.ParriedDamage ||
-                    entries[i].type == ActionEffectType.Miss) {
-   
-                    EffectLog($"{entries[i]}");
-   
-                    // flyTextToProcessDict[tDmg] = actionToDamageTypeDict[id];
-                    if (configuration.TextColoringEnabled)
-						AddToFutureFlyText(tDmg, actionToDamageTypeDict[id]);
+
+	            if (entries[i].type == ActionEffectType.Damage
+	                || entries[i].type == ActionEffectType.BlockedDamage
+	                || entries[i].type == ActionEffectType.ParriedDamage
+                    // || entries[i].type == ActionEffectType.Miss
+				) {
+		            EffectLog($"{entries[i]}, s: {sourceId} t: {tTarget}");
+
+		            if (configuration.TextColoringEnabled &&
+		                (sourceId == GetCharacterActorId() || tTarget == GetCharacterActorId()))
+			            AddToFutureFlyText(tDmg, actionToDamageTypeDict[id]);
                 }
             }
-            receiveActionEffectHook.Original(unk1, unk2, unk3, packet, unk4, unk5, unk6);
+            receiveActionEffectHook.Original(sourceId, unk2, unk3, packet, unk4, unk5, unk6);
+        }
+
+        private unsafe void WriteNextEight(IntPtr position) {
+	        string write = "";
+	        for (int i = 0; i < 8; i++)
+		        write += $"{*((byte*)position + i):X2} ";
+	        EffectLog(write);
+        }
+
+        // the things we do to avoid opcodes
+        private unsafe bool IsEndOfEffects(IntPtr position, int effectsCount) {
+
+            // if we're not eve on the boundary of the effects packet size
+            // it can't possibly be the end of the effects
+	        if (!(effectsCount == 8 || effectsCount % 64 == 0))
+		        return false;
+            EffectLog($"on a boundary of {effectsCount} effects, checking...");
+
+	        ushort one = *(ushort*) position;
+	        ushort two = *(ushort*) (position + 2);
+	        ushort three = *(ushort*) (position + 4);
+
+	        ulong firstTarget = *(ulong*) (position + 6);
+	        bool hasActor = IsInActorTable((uint) firstTarget);
+
+
+            // EffectLog("checking for end of effects:");
+	        EffectLog($"p1: {one} p2: {two} p3: {three} t: {firstTarget} | {hasActor}");
+
+            // note that these conditions already assume we are on a boundary of (1, 64, 128, etc) entries
+            if (firstTarget == 0)
+                return one == 0 && two == 0 && three == 0;
+
+            return IsInActorTable((uint) firstTarget);
+
+	        // return
+		       //  one == 0 && two == 0 && three == 0;// && firstTarget != 0;
         }
    
 		private void EffectLog(string str)
@@ -481,60 +564,48 @@ namespace DamageInfoPlugin
 	        futureFlyText[dmg] = tmpList;
         }
    
-   //      // Not all effect packets end up being flytext
-   //      // so we have to clean up the orphaned entries here
-   //      private void Cleanup(object obj) {
-   //          FlyTextLog($"pre-cleanup: {futureFlyText.Values.Count}");
-	  //       long ms = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
-   //
-	  //       for (int i = 0; i < futureFlyText.Keys.Count; i++) {
-		 //        uint key = futureFlyText.Keys.ElementAt(i);
-		 //        for (int j = 0; j < futureFlyText[key].Count; j++) {
-			//         long diff = ms - futureFlyText[key][j].Item1;
-			//         if (diff > 5000) {
-			// 	        futureFlyText[key].Remove(futureFlyText[key][j]);
-			// 	        j--;
-			//         }
-		 //        }
-   //              if (futureFlyText[key].Count == 0)
-   //                  futureFlyText.TryRemove(key, out var unused);
-	  //       }
-	  //       FlyTextLog($"post-cleanup: {futureFlyText.Values.Count}");
-   //      }
+		// Not all effect packets end up being flytext
+		// so we have to clean up the orphaned entries here
+        private void Cleanup() {
+	        if (futureFlyText == null) return;
+
+	        long ms = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
+	        if (ms - lastCleanup < CleanupInterval) return;
+
+            FlyTextLog($"pre-cleanup: {futureFlyText.Values.Count}");
+            lastCleanup = ms;
+
+            var toRemove = new List<uint>();
+
+            foreach (uint key in futureFlyText.Keys) {
+	            if (!futureFlyText.TryGetValue(key, out var list)) continue;
+	            if (list == null) {
+		            toRemove.Add(key);
+		            continue;
+                }
+
+	            for (int i = 0; i < list.Count; i++) {
+		            long diff = ms - list[i].Item1;
+		            if (diff <= 5000) continue;
+		            list.Remove(list[i]);
+		            i--;
+	            }
+
+	            if (list.Count == 0)
+		            toRemove.Add(key);
+            }
+
+            foreach (uint key in toRemove)
+	            futureFlyText.TryRemove(key, out var unused);
+
+	        FlyTextLog($"post-cleanup: {futureFlyText.Values.Count}");
+        }
 
 		public void ClearFlyTextQueue() {
-            System.Diagnostics.Debug.WriteLine("clearing flytext log");
-			// FlyTextLog($"clearing flytext queue of {flyTextToProcessDict.Count} items...");
-			// flyTextToProcessDict.Clear();
-
-			// Seems UI init calls this function
-			// so just check for null
-			if (futureFlyText == null) return;
+            if (futureFlyText == null) return;
 
 			FlyTextLog($"clearing flytext queue of {futureFlyText.Values.Count} items...");
 			futureFlyText.Clear();
 		}
-   
-        public static UInt32 Color3ToUint(Vector3 color)
-        {
-	        byte[] tmp = new byte[4];
-	        tmp[0] = (byte)Math.Truncate(color.X * 255); //r
-	        tmp[1] = (byte)Math.Truncate(color.Y * 255); //g
-	        tmp[2] = (byte)Math.Truncate(color.Z * 255); //b
-	        tmp[3] = 0xFF;
-   
-	        return BitConverter.ToUInt32(tmp, 0);
-        }
-   
-        public static UInt32 Color4ToUint(Vector4 color)
-        {
-	        byte[] tmp = new byte[4];
-	        tmp[0] = (byte)Math.Truncate(color.X * 255); //r
-	        tmp[1] = (byte)Math.Truncate(color.Y * 255); //g
-	        tmp[2] = (byte)Math.Truncate(color.Z * 255); //b
-	        tmp[3] = (byte)Math.Truncate(color.W * 255); //a
-   
-	        return BitConverter.ToUInt32(tmp, 0);
-        }
     }
 }
