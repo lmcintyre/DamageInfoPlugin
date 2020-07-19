@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -12,6 +13,7 @@ using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Hooking;
 using ImGuiNET;
 using Action = Lumina.Excel.GeneratedSheets.Action;
+using Actor = Dalamud.Game.ClientState.Structs.Actor;
 
 namespace DamageInfoPlugin
 {
@@ -275,6 +277,7 @@ namespace DamageInfoPlugin
             receiveActionEffectHook.Enable();
 
             PluginLog.Log($"player actor id: {pi.ClientState.LocalPlayer.ActorId}");
+            PluginLog.Log($"player actor is at {pi.ClientState.LocalPlayer.Address.ToInt64():X}");
 
             pi.UiBuilder.OnBuildUi += DrawUI;
             pi.UiBuilder.OnOpenConfigUi += (sender, args) => DrawConfigUI();
@@ -297,7 +300,11 @@ namespace DamageInfoPlugin
 
         private void OnCommand(string command, string args)
         {
+            #if DEBUG
             ui.Visible = true;
+            #else
+			ui.SettingsVisible = true;
+			#endif
         }
 
         private void DrawUI()
@@ -312,10 +319,6 @@ namespace DamageInfoPlugin
 
         public ulong GetCharacterActorId() {
 	        return (ulong) pi.ClientState.LocalPlayer.ActorId;
-        }
-
-        public bool IsInActorTable(uint id) {
-	        return pi.ClientState.Actors.Any(a => a.ActorId == id);
         }
 
         public unsafe delegate IntPtr CreateFlyTextDelegate(IntPtr flyTextMgr,
@@ -356,11 +359,7 @@ namespace DamageInfoPlugin
    
 		        strText1 = strText1?.Replace("%", "%%");
 		        strText2 = strText2?.Replace("%", "%%");
-
-                //TODO: not necessary but maybe parse item payloads (i assume that's what it is when item links are jumbled)
-                // var mgr = new SeStringManager(pi.Data);
-                // mgr.Parse()
-
+                
                 FlyTextLog($"flytext created: kind: {ftKind}, val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
 		        FlyTextLog($"text1: {strText1} | text2: {strText2}");
 	        }
@@ -397,72 +396,73 @@ namespace DamageInfoPlugin
    
         public unsafe delegate void ReceiveActionEffectDelegate(ulong sourceId, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
    
-        public unsafe void ReceiveActionEffect(ulong sourceId, IntPtr unk2, IntPtr unk3,
+        public unsafe void ReceiveActionEffect(ulong sourceId, IntPtr sourceCharacter, IntPtr unk3,
 										        IntPtr packet,
 										        IntPtr unk4, IntPtr unk5, IntPtr unk6) {
    
             // no log, no processing... just get him outta here
-	        if (!configuration.EffectLogEnabled && !configuration.TextColoringEnabled) {
-		        receiveActionEffectHook.Original(sourceId, unk2, unk3, packet, unk4, unk5, unk6);
+	        if ((!configuration.EffectLogEnabled && !configuration.TextColoringEnabled)){
+		        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
 		        return;
 	        }
 
-            // EffectLog($"p1: {source.ToInt64():X}");
-            // EffectLog($"p2: {unk2.ToInt64():X}");
-            // EffectLog($"p3: {unk3.ToInt64():X}");
-            // EffectLog($"p4: {unk4.ToInt64():X}");
-            // EffectLog($"p5: {unk5.ToInt64():X}");
-            // EffectLog($"p6: {unk6.ToInt64():X}");
-   
-	        EffectLog($"packet at {packet.ToInt64():X}");
+#if DEBUG
+            EffectLog($"p1: {sourceId}");
+            EffectLog($"p2: {sourceCharacter.ToInt64():X}");
+            Actor test = Marshal.PtrToStructure<Actor>(sourceCharacter);
+            EffectLog($"source: {test.Name}");
+            EffectLog($"p3: {unk3.ToInt64():X}");
+            EffectLog($"p4: {unk4.ToInt64():X}");
+            EffectLog($"p5: {unk5.ToInt64():X}");
+            EffectLog($"p6: {unk6.ToInt64():X}");
+            EffectLog($"packet at {packet.ToInt64():X}");
+#endif
+
 			uint id = *((uint*)packet.ToPointer() + 0x2);
 			ushort op = *((ushort*) packet.ToPointer() - 0x7);
-            EffectLog($"--- source actor: {sourceId}, action id {id}, opcode: {op:X} ---");
+			byte targetCount = *(byte*) (packet + 0x21);
+            EffectLog($"--- source actor: {sourceId}, action id {id}, opcode: {op:X} numTargets: {targetCount} ---");
    
             IntPtr effectsPtr = packet + 0x2A;
-            List<EffectEntry> entries = new List<EffectEntry>(8);
+
+            int effectsEntries = 0;
+            int targetEntries = 1;
+            if (targetCount == 0) {
+	            effectsEntries = 0;
+	            targetEntries = 1;
+            } else if (targetCount == 1) {
+	            effectsEntries = 8;
+	            targetEntries = 1;
+            } else if (targetCount <= 8) {
+	            effectsEntries = 64;
+	            targetEntries = 8;
+            } else if (targetCount <= 16) {
+	            effectsEntries = 128;
+	            targetEntries = 16;
+            } else if (targetCount <= 24) {
+	            effectsEntries = 192;
+	            targetEntries = 24;
+            } else if (targetCount <= 32) {
+	            effectsEntries = 256;
+	            targetEntries = 32;
+            }
+
+            List<EffectEntry> entries = new List<EffectEntry>(effectsEntries);
    
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < effectsEntries; i++) {
                 entries.Add(*(EffectEntry*)effectsPtr);
-                EffectLog($"{entries[entries.Count - 1]}");
                 effectsPtr += 8;
             }
-
-            EffectLog($"base entries loaded, next8:");
-            WriteNextEight(effectsPtr);
-   
-            // attempt to read more effects up to the maximum for effect packets
-            for (int i = 0; i < 31; i++) {
-	            if (IsEndOfEffects(effectsPtr, entries.Count))
-		            break;
-
-	            for (int j = 0; j < 8; j++) {
-		            entries.Add(*(EffectEntry*)effectsPtr);
-		            EffectLog($"{entries[entries.Count - 1]}");
-                    effectsPtr += 8;
-	            }
-                EffectLog($"read another set, next8:");
-                WriteNextEight(effectsPtr);
-            }
-
-            EffectLog($"{entries.Count} effects");
-
-            // EffectLog($"loading targets, next8:");
-            // WriteNextEight(effectsPtr);
+            
             effectsPtr += 6;
-            int numTargets = entries.Count == 8 ? 1 : entries.Count / 8;
-            ulong[] targets = new ulong[numTargets];
+            ulong[] targets = new ulong[targetEntries];
 			
-            for (int i = 0; i < numTargets; i++) {
+            for (int i = 0; i < targetCount; i++) {
 	            targets[i] = *(ulong*) effectsPtr;
-	            EffectLog($"targets: {targets[i]}");
                 effectsPtr += 8;
             }
 
-            // EffectLog($"loaded {entries.Count} entries...");
             for (int i = 0; i < entries.Count; i++) {
-	            // if (entries[i].type == ActionEffectType.Nothing)
-		           //  continue;
 		        ulong tTarget = targets[i / 8];
 		        uint tDmg = entries[i].value;
 	            if (entries[i].mult != 0)
@@ -480,7 +480,7 @@ namespace DamageInfoPlugin
 			            AddToFutureFlyText(tDmg, actionToDamageTypeDict[id]);
                 }
             }
-            receiveActionEffectHook.Original(sourceId, unk2, unk3, packet, unk4, unk5, unk6);
+            receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
         }
 
         private unsafe void WriteNextEight(IntPtr position) {
@@ -489,37 +489,7 @@ namespace DamageInfoPlugin
 		        write += $"{*((byte*)position + i):X2} ";
 	        EffectLog(write);
         }
-
-        // the things we do to avoid opcodes
-        private unsafe bool IsEndOfEffects(IntPtr position, int effectsCount) {
-
-            // if we're not eve on the boundary of the effects packet size
-            // it can't possibly be the end of the effects
-	        if (!(effectsCount == 8 || effectsCount % 64 == 0))
-		        return false;
-            EffectLog($"on a boundary of {effectsCount} effects, checking...");
-
-	        ushort one = *(ushort*) position;
-	        ushort two = *(ushort*) (position + 2);
-	        ushort three = *(ushort*) (position + 4);
-
-	        ulong firstTarget = *(ulong*) (position + 6);
-	        bool hasActor = IsInActorTable((uint) firstTarget);
-
-
-            // EffectLog("checking for end of effects:");
-	        EffectLog($"p1: {one} p2: {two} p3: {three} t: {firstTarget} | {hasActor}");
-
-            // note that these conditions already assume we are on a boundary of (1, 64, 128, etc) entries
-            if (firstTarget == 0)
-                return one == 0 && two == 0 && three == 0;
-
-            return IsInActorTable((uint) firstTarget);
-
-	        // return
-		       //  one == 0 && two == 0 && three == 0;// && firstTarget != 0;
-        }
-   
+        
 		private void EffectLog(string str)
 		{
 		   if (configuration.EffectLogEnabled)
