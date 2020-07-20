@@ -2,6 +2,8 @@
 using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Text;
+using Dalamud.Plugin;
 
 namespace DamageInfoPlugin
 {
@@ -14,9 +16,11 @@ namespace DamageInfoPlugin
 
         private int kind, val1, val2, icon;
         private Vector4 color;
+        private byte[] text1 = new byte[32];
+        private byte[] text2 = new byte[32];
 
-        // this extra bool exists for ImGui, since you can't ref a property
-        private bool visible = false;
+		// this extra bool exists for ImGui, since you can't ref a property
+		private bool visible = false;
         public bool Visible
         {
             get => visible;
@@ -58,7 +62,7 @@ namespace DamageInfoPlugin
         {
 	        if (!Visible) return;
 
-	        ImGui.SetNextWindowSize(new Vector2(400, 300), ImGuiCond.FirstUseEver);
+	        ImGui.SetNextWindowSize(new Vector2(400, 350), ImGuiCond.FirstUseEver);
 	        ImGui.SetNextWindowSizeConstraints(new Vector2(400, 200), new Vector2(float.MaxValue, float.MaxValue));
 	        if (ImGui.Begin("DamageInfoDebug", ref this.visible, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)) {
 		        bool hijack = damageInfoPlugin.Hijack;
@@ -78,7 +82,11 @@ namespace DamageInfoPlugin
 		        ImGui.Spacing();
 		        ImGui.InputInt("val2", ref val2);
 		        ImGui.Spacing();
-		        ImGui.InputFloat4("color", ref color);
+		        ImGui.InputText("text1", text1, (uint) text1.Length);
+		        ImGui.Spacing();
+		        ImGui.InputText("text2", text2, (uint) text2.Length);
+				ImGui.Spacing();
+                ImGui.InputFloat4("color", ref color);
 		        ImGui.Spacing();
 		        ImGui.InputInt("icon", ref icon);
 
@@ -89,12 +97,15 @@ namespace DamageInfoPlugin
 			        uint tIcon = (uint)icon;
 		        
 			        uint tColor = ImGui.GetColorU32(color);
-		        
-			        string test1 = "test1";
-			        string test2 = "test2";
-		        
-			        IntPtr tText1 = Marshal.StringToHGlobalAnsi(test1);
-			        IntPtr tText2 = Marshal.StringToHGlobalAnsi(test2);
+					
+			        string text1Str = System.Text.Encoding.ASCII.GetString(text1);
+			        string text2Str = System.Text.Encoding.ASCII.GetString(text2);
+
+					PluginLog.Log($"text1 : {text1Str}");
+					PluginLog.Log($"text2 : {text2Str}");
+					
+			        IntPtr tText1 = Marshal.StringToHGlobalAnsi(text1Str);
+			        IntPtr tText2 = Marshal.StringToHGlobalAnsi(text2Str);
 		        
 			        damageInfoPlugin.hijackStruct = new HijackStruct() {
 				        kind = tKind,
