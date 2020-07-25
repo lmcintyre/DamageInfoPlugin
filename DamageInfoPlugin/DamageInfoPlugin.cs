@@ -273,9 +273,6 @@ namespace DamageInfoPlugin
             receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, (ReceiveActionEffectDelegate) ReceiveActionEffect);
             receiveActionEffectHook.Enable();
 
-            PluginLog.Log($"player actor id: {pi.ClientState.LocalPlayer.ActorId}");
-            PluginLog.Log($"player actor is at {pi.ClientState.LocalPlayer.Address.ToInt64():X}");
-
             pi.UiBuilder.OnBuildUi += DrawUI;
             pi.UiBuilder.OnOpenConfigUi += (sender, args) => DrawConfigUI();
         }
