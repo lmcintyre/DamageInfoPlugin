@@ -4,14 +4,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.NetworkInformation;
-using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Threading;
-using Dalamud.Game.Chat.SeStringHandling;
-using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Hooking;
 using ImGuiNET;
+using Lumina.Excel.GeneratedSheets;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 using Actor = Dalamud.Game.ClientState.Structs.Actor;
 
@@ -239,14 +235,15 @@ namespace DamageInfoPlugin
         private Hook<ReceiveActionEffectDelegate> receiveActionEffectHook;
         
         private Dictionary<uint, DamageType> actionToDamageTypeDict;
-        private ConcurrentDictionary<uint, List<Tuple<long, DamageType>>> futureFlyText;
+        private ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>> futureFlyText;
+        private ConcurrentQueue<Tuple<IntPtr, long>> text;
         private long lastCleanup;
 
-        public void Initialize(DalamudPluginInterface pluginInterface)
-        {
-            lastCleanup = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
+        public void Initialize(DalamudPluginInterface pluginInterface) {
+	        lastCleanup = Ms();
             actionToDamageTypeDict = new Dictionary<uint, DamageType>();
-	        futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType>>>();
+	        futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>>();
+            text = new ConcurrentQueue<Tuple<IntPtr, long>>();
 
             pi = pluginInterface;
 
@@ -300,11 +297,11 @@ namespace DamageInfoPlugin
 
         private void OnCommand(string command, string args)
         {
-            #if DEBUG
+#if DEBUG
             ui.Visible = true;
-            #else
+#else
 			ui.SettingsVisible = true;
-			#endif
+#endif
         }
 
         private void DrawUI()
@@ -319,6 +316,13 @@ namespace DamageInfoPlugin
 
         public ulong GetCharacterActorId() {
 	        return (ulong) pi.ClientState.LocalPlayer.ActorId;
+        }
+
+        public string GetActorName(int id) {
+	        foreach (Dalamud.Game.ClientState.Actors.Types.Actor t in pi.ClientState.Actors)
+		        if (id == t.ActorId)
+			        return t.Name;
+	        return "";
         }
 
         public unsafe delegate IntPtr CreateFlyTextDelegate(IntPtr flyTextMgr,
@@ -364,34 +368,46 @@ namespace DamageInfoPlugin
 		        FlyTextLog($"text1: {strText1} | text2: {strText2}");
 	        }
 
-	        if (configuration.TextColoringEnabled && TryGetFlyTextDamageType(val1, out DamageType dmgType))
-	        {
-                Cleanup();
-		        if (ftKind == FlyTextKind.AutoAttack
-		            || ftKind == FlyTextKind.CriticalHit
-		            || ftKind == FlyTextKind.DirectHit
-		            || ftKind == FlyTextKind.CriticalDirectHit
-		            || ftKind == FlyTextKind.NamedAttack
-		            || ftKind == FlyTextKind.NamedDirectHit
-		            || ftKind == FlyTextKind.NamedCriticalHit
-		            || ftKind == FlyTextKind.NamedCriticalDirectHit
-				) {
-	                switch (dmgType)
-			        {
-				        case DamageType.Physical:
-					        tColor = ImGui.GetColorU32(configuration.PhysicalColor);
-					        break;
-				        case DamageType.Magic:
-					        tColor = ImGui.GetColorU32(configuration.MagicColor);
-                            break;
-				        case DamageType.Darkness:
-					        tColor = ImGui.GetColorU32(configuration.DarknessColor);
-                            break;
+	        if (TryGetFlyTextDamageType(val1, out DamageType dmgType, out int sourceId)) {
+		        if (configuration.TextColoringEnabled)
+		        {
+			        if (ftKind == FlyTextKind.AutoAttack
+			            || ftKind == FlyTextKind.CriticalHit
+			            || ftKind == FlyTextKind.DirectHit
+			            || ftKind == FlyTextKind.CriticalDirectHit
+			            || ftKind == FlyTextKind.NamedAttack
+			            || ftKind == FlyTextKind.NamedDirectHit
+			            || ftKind == FlyTextKind.NamedCriticalHit
+			            || ftKind == FlyTextKind.NamedCriticalDirectHit) {
+				        switch (dmgType) {
+					        case DamageType.Physical:
+						        tColor = ImGui.GetColorU32(configuration.PhysicalColor);
+						        break;
+					        case DamageType.Magic:
+						        tColor = ImGui.GetColorU32(configuration.MagicColor);
+						        break;
+					        case DamageType.Darkness:
+						        tColor = ImGui.GetColorU32(configuration.DarknessColor);
+						        break;
+				        }
+			        }
+		        }
+
+		        if (configuration.SourceTextEnabled && sourceId != (int) GetCharacterActorId()) {
+			        string name = GetActorName(sourceId);
+			        if (!string.IsNullOrEmpty(name)) {
+				        string existingText = "";
+				        if (text1 != IntPtr.Zero)
+					        existingText = Marshal.PtrToStringAnsi(text1);
+
+				        string combined = $"from {name} {existingText}";
+				        text1 = Marshal.StringToHGlobalAnsi(combined);
+                        text.Enqueue(new Tuple<IntPtr, long>(text1, Ms()));
 			        }
 		        }
             }
 
-            return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
+	        return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
         }
    
         public unsafe delegate void ReceiveActionEffectDelegate(ulong sourceId, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
@@ -399,9 +415,9 @@ namespace DamageInfoPlugin
         public unsafe void ReceiveActionEffect(ulong sourceId, IntPtr sourceCharacter, IntPtr unk3,
 										        IntPtr packet,
 										        IntPtr unk4, IntPtr unk5, IntPtr unk6) {
-   
+	        Cleanup();
             // no log, no processing... just get him outta here
-	        if ((!configuration.EffectLogEnabled && !configuration.TextColoringEnabled)){
+            if ((!configuration.EffectLogEnabled && !configuration.TextColoringEnabled)){
 		        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
 		        return;
 	        }
@@ -475,9 +491,10 @@ namespace DamageInfoPlugin
 				) {
 		            EffectLog($"{entries[i]}, s: {sourceId} t: {tTarget}");
 
-		            if (configuration.TextColoringEnabled &&
-		                (sourceId == GetCharacterActorId() || tTarget == GetCharacterActorId()))
-			            AddToFutureFlyText(tDmg, actionToDamageTypeDict[id]);
+		            if (configuration.TextColoringEnabled
+		                && (sourceId == GetCharacterActorId() || tTarget == GetCharacterActorId())
+		                && tDmg != 0)
+			            AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], (int) sourceId);
                 }
             }
             receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
@@ -502,8 +519,9 @@ namespace DamageInfoPlugin
 			   PluginLog.Log($"[flytext] {str}");
 		}
    
-        private bool TryGetFlyTextDamageType(uint dmg, out DamageType type) {
+        private bool TryGetFlyTextDamageType(uint dmg, out DamageType type, out int sourceId) {
 	        type = DamageType.Unknown;
+	        sourceId = 0;
 	        if (!futureFlyText.TryGetValue(dmg, out var list)) return false;
    
 	        if (list.Count == 0)
@@ -515,13 +533,18 @@ namespace DamageInfoPlugin
 			        item = tuple;
 	        list.Remove(item);
 	        type = item.Item2;
+	        sourceId = item.Item3;
    
 	        return true;
         }
+
+        private long Ms() {
+            return new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
+        }
    
-        private void AddToFutureFlyText(uint dmg, DamageType type) {
-	        long ms = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
-	        var toInsert = new Tuple<long, DamageType>(ms, type);
+        private void AddToFutureFlyText(uint dmg, DamageType type, int sourceId) {
+	        long ms = Ms();
+	        var toInsert = new Tuple<long, DamageType, int>(ms, type, sourceId);
    
 	        if (futureFlyText.TryGetValue(dmg, out var list)) {
 		        if (list != null) {
@@ -530,7 +553,7 @@ namespace DamageInfoPlugin
 		        }
 	        }
    
-	        var tmpList = new List<Tuple<long, DamageType>> {toInsert};
+	        var tmpList = new List<Tuple<long, DamageType, int>> {toInsert};
 	        futureFlyText[dmg] = tmpList;
         }
    
@@ -539,10 +562,11 @@ namespace DamageInfoPlugin
         private void Cleanup() {
 	        if (futureFlyText == null) return;
 
-	        long ms = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
+	        long ms = Ms();
 	        if (ms - lastCleanup < CleanupInterval) return;
 
-            FlyTextLog($"pre-cleanup: {futureFlyText.Values.Count}");
+            FlyTextLog($"pre-cleanup flytext: {futureFlyText.Values.Count}");
+            FlyTextLog($"pre-cleanup text: {text.Count}");
             lastCleanup = ms;
 
             var toRemove = new List<uint>();
@@ -568,7 +592,13 @@ namespace DamageInfoPlugin
             foreach (uint key in toRemove)
 	            futureFlyText.TryRemove(key, out var unused);
 
-	        FlyTextLog($"post-cleanup: {futureFlyText.Values.Count}");
+            while (text.TryPeek(out var tup) && ms - tup?.Item2 >= 5000) {
+	            text.TryDequeue(out var newTup);
+	            Marshal.FreeHGlobal(newTup.Item1);
+            }
+
+	        FlyTextLog($"post-cleanup flytext: {futureFlyText.Values.Count}");
+	        FlyTextLog($"post-cleanup text: {text.Count}");
         }
 
 		public void ClearFlyTextQueue() {

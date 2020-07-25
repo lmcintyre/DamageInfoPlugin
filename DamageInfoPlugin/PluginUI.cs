@@ -125,7 +125,7 @@ namespace DamageInfoPlugin
         {
             if (!SettingsVisible) return;
 
-            ImGui.SetNextWindowSize(new Vector2(370, 195), ImGuiCond.Always);
+            ImGui.SetNextWindowSize(new Vector2(370, 220), ImGuiCond.Always);
             if (ImGui.Begin("Damage Info Config", ref settingsVisible,
                 ImGuiWindowFlags.NoResize |
                 ImGuiWindowFlags.NoCollapse | 
@@ -140,6 +140,7 @@ namespace DamageInfoPlugin
 	            var effectLogConfigValue = configuration.EffectLogEnabled;
 	            var flytextLogConfigValue = configuration.FlyTextLogEnabled;
 	            var colorTextConfigValue = configuration.TextColoringEnabled;
+	            var sourceTextConfigValue = configuration.SourceTextEnabled;
 
                 if (ImGui.ColorEdit4("Physical Color", ref lPhys)) {
 				    configuration.PhysicalColor = lPhys;
@@ -175,7 +176,13 @@ namespace DamageInfoPlugin
 	                configuration.TextColoringEnabled = colorTextConfigValue;
                     configuration.Save();
                 }
-            }
+
+                if (ImGui.Checkbox("Source Text Enabled", ref sourceTextConfigValue))
+                {
+	                configuration.SourceTextEnabled = sourceTextConfigValue;
+	                configuration.Save();
+                }
+			}
             ImGui.End();
         }
     }

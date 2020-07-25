@@ -1,9 +1,9 @@
 {
   "Author": "perchbird",
   "Name": "Damage Info Plugin",
-  "Description": "Configurable UI options for damage. /dmginfo displays the UI.",
+  "Description": "Configurable UI options for damage fly text. /dmginfo displays the config.",
   "InternalName": "DamageInfoPlugin",
-  "AssemblyVersion": "0.9",
+  "AssemblyVersion": "0.9.2",
   "RepoUrl": "https://github.com/lmcintyre/DamageInfoPlugin",
   "ApplicableVersion": "any",
   "Tags": ["damage", "flytext", "UI"],

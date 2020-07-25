@@ -12,7 +12,6 @@ namespace UIDev
             UIBootstrap.Inititalize(new UITest());
         }
 
-        private TextureWrap goatImage;
         private SimpleImGuiScene scene;
 
         Vector4 testPhys = new Vector4(1, 0, 0, 1);
@@ -25,7 +24,6 @@ namespace UIDev
             // but it can accomplish the same things, and is really only used for initial setup here
 
             // eg, to load an image resource for use with ImGui 
-            this.goatImage = scene.LoadImage(@"goat.png");
 
             scene.OnBuildUI += Draw;
 
@@ -38,7 +36,7 @@ namespace UIDev
 
         public void Dispose()
         {
-            this.goatImage.Dispose();
+
         }
 
         // You COULD go all out here and make your UI generic and work on interfaces etc, and then
@@ -150,37 +148,39 @@ namespace UIDev
             if (!SettingsVisible)
                 return;
 
-            ImGui.SetNextWindowSize(new Vector2(370, 195), ImGuiCond.Always);
+            ImGui.SetNextWindowSize(new Vector2(370, 225), ImGuiCond.Always);
             if (ImGui.Begin("A Wonderful Configuration Window", ref this.settingsVisible,
 	            ImGuiWindowFlags.NoScrollbar |
 					ImGuiWindowFlags.NoScrollWithMouse
                 )) {
 
-	            // if (ImGui.Button("Physical Color")) {
-		           //  ShouldShowColorWindow = true;
-		           //  ColorWindowType = 1;
-	            // }
+	            Vector4 fakeV = new Vector4();
 
-	            ImGui.ColorEdit4("Physical Color", ref testPhys);
-                ImGui.ColorEdit4("Magical Color", ref testMag);
-	            ImGui.ColorEdit4("Darkness Color", ref testDark);
-	            ImGui.Checkbox("pen15", ref fakeConfigBool);
-	            ImGui.Checkbox("pen16", ref fakeConfigBool);
-	            ImGui.Checkbox("pen17", ref fakeConfigBool);
-	            // ImGui.SameLine();
-	            // ImGui.ColorButton("Darkness Color", testDark);
+	            if (ImGui.ColorEdit4("Physical Color", ref fakeV)) { }
 
-                // if (ImGui.ColorPicker3("test2", ref baseColor,
-                //  ImGuiColorEditFlags.Float
-                //  )) {
-                //     System.Diagnostics.Debug.WriteLine($"{baseColor}");
-                //     System.Diagnostics.Debug.WriteLine($"{Color3ToUint(baseColor)}");
-                // }
+	            if (ImGui.ColorEdit4("Magical Color", ref fakeV))
+	            {
+	            }
 
-                if (ImGui.Checkbox("Random Config Bool", ref fakeConfigBool))
-                {
-                    // nothing to do in a fake ui!
-                }
+	            if (ImGui.ColorEdit4("Darkness Color", ref fakeV))
+	            {
+	            }
+
+	            if (ImGui.Checkbox("EffectLog Enabled (Debug)", ref fakeConfigBool))
+	            {
+	            }
+
+	            if (ImGui.Checkbox("FlyTextLog Enabled (Debug)", ref fakeConfigBool))
+	            {
+	            }
+
+	            if (ImGui.Checkbox("Text Coloring Enabled", ref fakeConfigBool))
+	            {
+	            }
+
+	            if (ImGui.Checkbox("Source Text Enabled", ref fakeConfigBool))
+	            {
+	            }
             }
             ImGui.End();
         }

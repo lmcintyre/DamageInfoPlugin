@@ -12,6 +12,7 @@ namespace DamageInfoPlugin
 
         public bool EffectLogEnabled { get; set; } = false;
         public bool FlyTextLogEnabled { get; set; } = false;
+        public bool SourceTextEnabled { get; set; } = false;
         private bool _TextColoringEnabled = true;
 
         public bool TextColoringEnabled {
