@@ -125,7 +125,7 @@ namespace DamageInfoPlugin
         {
             if (!SettingsVisible) return;
 
-            ImGui.SetNextWindowSize(new Vector2(370, 220), ImGuiCond.Always);
+            ImGui.SetNextWindowSize(new Vector2(370, 300), ImGuiCond.Always);
             if (ImGui.Begin("Damage Info Config", ref settingsVisible,
                 ImGuiWindowFlags.NoResize |
                 ImGuiWindowFlags.NoCollapse | 
@@ -139,10 +139,13 @@ namespace DamageInfoPlugin
 	            var lDark = configuration.DarknessColor;
 	            var effectLogConfigValue = configuration.EffectLogEnabled;
 	            var flytextLogConfigValue = configuration.FlyTextLogEnabled;
-	            var colorTextConfigValue = configuration.TextColoringEnabled;
+	            var colorIncTextConfigValue = configuration.IncomingColorEnabled;
+	            var colorOutTextConfigValue = configuration.OutgoingColorEnabled;
+	            var petColorConfigValue = configuration.PetDamageColorEnabled;
 	            var sourceTextConfigValue = configuration.SourceTextEnabled;
+	            var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
 
-                if (ImGui.ColorEdit4("Physical Color", ref lPhys)) {
+	            if (ImGui.ColorEdit4("Physical Color", ref lPhys)) {
 				    configuration.PhysicalColor = lPhys;
 				    configuration.Save();
 				}
@@ -171,17 +174,35 @@ namespace DamageInfoPlugin
 	                configuration.Save();
                 }
 
-                if (ImGui.Checkbox("Text Coloring Enabled", ref colorTextConfigValue))
+                if (ImGui.Checkbox("Incoming Text Coloring", ref colorIncTextConfigValue))
                 {
-	                configuration.TextColoringEnabled = colorTextConfigValue;
+	                configuration.IncomingColorEnabled = colorIncTextConfigValue;
                     configuration.Save();
                 }
 
-                if (ImGui.Checkbox("Source Text Enabled", ref sourceTextConfigValue))
+                if (ImGui.Checkbox("Outgoing Text Coloring", ref colorOutTextConfigValue))
+                {
+	                configuration.OutgoingColorEnabled = colorOutTextConfigValue;
+	                configuration.Save();
+                }
+
+                if (ImGui.Checkbox("Pet Damage Coloring", ref petColorConfigValue))
+                {
+	                configuration.PetDamageColorEnabled = petColorConfigValue;
+	                configuration.Save();
+                }
+
+				if (ImGui.Checkbox("Source Text", ref sourceTextConfigValue))
                 {
 	                configuration.SourceTextEnabled = sourceTextConfigValue;
 	                configuration.Save();
                 }
+
+				if (ImGui.Checkbox("Pet Source Text", ref petSourceTextConfigValue))
+				{
+					configuration.PetSourceTextEnabled = petSourceTextConfigValue;
+					configuration.Save();
+				}
 			}
             ImGui.End();
         }

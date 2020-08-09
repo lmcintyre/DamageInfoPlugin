@@ -5,11 +5,12 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using Dalamud.Game.ClientState.Actors.Types;
+using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
 using Dalamud.Hooking;
 using ImGuiNET;
 using Lumina.Excel.GeneratedSheets;
 using Action = Lumina.Excel.GeneratedSheets.Action;
-using Actor = Dalamud.Game.ClientState.Structs.Actor;
 
 namespace DamageInfoPlugin
 {
@@ -311,14 +312,46 @@ namespace DamageInfoPlugin
             ui.SettingsVisible = true;
         }
 
-        public ulong GetCharacterActorId() {
+        public bool IsCharacterPet(int suspectedPet) {
+	        int charaId = GetCharacterActorId();
+	        foreach (Actor a in pi.ClientState.Actors) {
+		        if (!(a is BattleNpc npc)) continue;
+
+		        IntPtr actPtr = npc.Address;
+		        if (actPtr == IntPtr.Zero) continue;
+
+		        if (npc.ActorId != suspectedPet)
+			        continue;
+
+		        if (npc.OwnerId == charaId)
+			        return true;
+	        }
+	        return false;
+        }
+
+        public int FindCharaPet() {
+	        int charaId = GetCharacterActorId();
+	        foreach (Actor a in pi.ClientState.Actors)
+	        {
+		        if (!(a is BattleNpc npc)) continue;
+
+		        IntPtr actPtr = npc.Address;
+		        if (actPtr == IntPtr.Zero) continue;
+
+		        if (npc.OwnerId == charaId)
+			        return npc.ActorId;
+	        }
+	        return -1;
+        }
+
+        public int GetCharacterActorId() {
 	        if (pi.ClientState.LocalPlayer != null)
-		        return (ulong) pi.ClientState.LocalPlayer.ActorId;
+		        return pi.ClientState.LocalPlayer.ActorId;
 	        return 0;
         }
 
         public string GetActorName(int id) {
-	        foreach (Dalamud.Game.ClientState.Actors.Types.Actor t in pi.ClientState.Actors)
+	        foreach (Actor t in pi.ClientState.Actors)
 				if (t != null)
 			        if (id == t.ActorId)
 				        return t.Name;
@@ -346,10 +379,10 @@ namespace DamageInfoPlugin
 				{
 					string hjText1 = Marshal.PtrToStringAnsi(hijackStruct.text1);
 					string hjText2 = Marshal.PtrToStringAnsi(hijackStruct.text2);
-
+				
 					FlyTextLog($"flytext hijacked: kind: {hijackStruct.kind}, val1: {hijackStruct.val1}, val2: {hijackStruct.val2}, color: {hijackStruct.color:X}, icon: {hijackStruct.icon}");
 					FlyTextLog($"text1: {hjText1} | text2: {hjText2}");
-
+				
 					return createFlyTextHook.Original(flyTextMgr, hijackStruct.kind, hijackStruct.val1, hijackStruct.val2, hijackStruct.text1, hijackStruct.color, hijackStruct.icon, hijackStruct.text2, unk3);
 				}
 
@@ -370,80 +403,96 @@ namespace DamageInfoPlugin
 
 				if (TryGetFlyTextDamageType(val1, out DamageType dmgType, out int sourceId))
 				{
-					if (configuration.TextColoringEnabled)
+					int charaId = GetCharacterActorId();
+					int petId = FindCharaPet();
+
+					if (configuration.OutgoingColorEnabled || configuration.IncomingColorEnabled)
 					{
-						if (ftKind == FlyTextKind.AutoAttack
-							|| ftKind == FlyTextKind.CriticalHit
-							|| ftKind == FlyTextKind.DirectHit
-							|| ftKind == FlyTextKind.CriticalDirectHit
-							|| ftKind == FlyTextKind.NamedAttack
-							|| ftKind == FlyTextKind.NamedDirectHit
-							|| ftKind == FlyTextKind.NamedCriticalHit
-							|| ftKind == FlyTextKind.NamedCriticalDirectHit)
-						{
-							switch (dmgType)
+						// sourceId == GetCharacterActorId() && configuration.OutgoingColorEnabled || (sourceId != GetCharacterActorId() && sourceId != FindCharaPet() && configuration.IncomingColorEnabled)
+						bool outPlayer = sourceId == charaId && configuration.OutgoingColorEnabled;
+						bool outPet = sourceId == petId && configuration.PetDamageColorEnabled;
+						bool outCheck = outPlayer || outPet;
+
+						bool incCheck = sourceId != charaId && sourceId != petId && configuration.IncomingColorEnabled;
+
+						// match up the condition with what to check
+						// because right now with this OR, it doesn't care if the source is incoming and outgoing is enabled
+						// so make sure that it oes it right
+						if (outCheck && !incCheck || !outCheck && incCheck) {
+							if (ftKind == FlyTextKind.AutoAttack
+							    || ftKind == FlyTextKind.CriticalHit
+							    || ftKind == FlyTextKind.DirectHit
+							    || ftKind == FlyTextKind.CriticalDirectHit
+							    || ftKind == FlyTextKind.NamedAttack
+							    || ftKind == FlyTextKind.NamedDirectHit
+							    || ftKind == FlyTextKind.NamedCriticalHit
+							    || ftKind == FlyTextKind.NamedCriticalDirectHit)
 							{
-								case DamageType.Physical:
-									tColor = ImGui.GetColorU32(configuration.PhysicalColor);
-									break;
-								case DamageType.Magic:
-									tColor = ImGui.GetColorU32(configuration.MagicColor);
-									break;
-								case DamageType.Darkness:
-									tColor = ImGui.GetColorU32(configuration.DarknessColor);
-									break;
+								switch (dmgType)
+								{
+									case DamageType.Physical:
+										tColor = ImGui.GetColorU32(configuration.PhysicalColor);
+										break;
+									case DamageType.Magic:
+										tColor = ImGui.GetColorU32(configuration.MagicColor);
+										break;
+									case DamageType.Darkness:
+										tColor = ImGui.GetColorU32(configuration.DarknessColor);
+										break;
+								}
 							}
 						}
 					}
 
-					if (configuration.SourceTextEnabled && sourceId != (int)GetCharacterActorId())
+					if (configuration.SourceTextEnabled)
 					{
-						string name = GetActorName(sourceId);
-						if (!string.IsNullOrEmpty(name))
-						{
-							string existingText = "";
-							if (text1 != IntPtr.Zero)
-								existingText = Marshal.PtrToStringAnsi(text1);
+						bool tgtCheck = sourceId != charaId && sourceId != petId;
+						bool petCheck = sourceId == petId && configuration.PetSourceTextEnabled;
 
-							string combined = $"from {name} {existingText}";
-							text1 = Marshal.StringToHGlobalAnsi(combined);
-							text.Enqueue(new Tuple<IntPtr, long>(text1, Ms()));
+						if (tgtCheck || petCheck) {
+							string name = GetActorName(sourceId);
+
+							if (!string.IsNullOrEmpty(name))
+							{
+								string existingText = "";
+								if (text1 != IntPtr.Zero)
+									existingText = Marshal.PtrToStringAnsi(text1);
+
+								string combined = $"from {name} {existingText}";
+								text1 = Marshal.StringToHGlobalAnsi(combined);
+								text.Enqueue(new Tuple<IntPtr, long>(text1, Ms()));
+							}
 						}
 					}
 				}
-
 			} catch (Exception e) {
 		        PluginLog.Log($"{e.Message} {e.StackTrace}");
 			}
-
-		    return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
-
+			return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
 		}
    
-        public unsafe delegate void ReceiveActionEffectDelegate(ulong sourceId, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
+        public delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
    
-        public unsafe void ReceiveActionEffect(ulong sourceId, IntPtr sourceCharacter, IntPtr unk3,
+        public unsafe void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr unk3,
 										        IntPtr packet,
 										        IntPtr unk4, IntPtr unk5, IntPtr unk6) {
 	        try {
 		        Cleanup();
 		        // no log, no processing... just get him outta here
-		        if ((!configuration.EffectLogEnabled && !configuration.TextColoringEnabled &&
+		        if ((!configuration.EffectLogEnabled && !(configuration.IncomingColorEnabled || configuration.OutgoingColorEnabled) &&
 		             !configuration.SourceTextEnabled)) {
 			        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
 			        return;
 		        }
 
 #if DEBUG
-            EffectLog($"p1: {sourceId}");
-            EffectLog($"p2: {sourceCharacter.ToInt64():X}");
-            Actor test = Marshal.PtrToStructure<Actor>(sourceCharacter);
-            EffectLog($"source: {test.Name}");
-            EffectLog($"p3: {unk3.ToInt64():X}");
-            EffectLog($"p4: {unk4.ToInt64():X}");
-            EffectLog($"p5: {unk5.ToInt64():X}");
-            EffectLog($"p6: {unk6.ToInt64():X}");
-            EffectLog($"packet at {packet.ToInt64():X}");
+	            EffectLog($"p1: {sourceId}");
+	            EffectLog($"p2: {sourceCharacter.ToInt64():X}");
+	            EffectLog($"p3: {unk3.ToInt64():X}");
+	            EffectLog($"p4: {unk4.ToInt64():X}");
+	            EffectLog($"p5: {unk5.ToInt64():X}");
+	            EffectLog($"p6: {unk6.ToInt64():X}");
+	            EffectLog($"packet at {packet.ToInt64():X}");
 #endif
 
 		        uint id = *((uint*) packet.ToPointer() + 0x2);
@@ -509,18 +558,25 @@ namespace DamageInfoPlugin
 			        ) {
 				        EffectLog($"{entries[i]}, s: {sourceId} t: {tTarget}");
 
-				        ulong actId = GetCharacterActorId();
-				        if ((configuration.TextColoringEnabled || configuration.SourceTextEnabled)
-				            && (sourceId == actId || tTarget == actId)
-				            && tDmg != 0)
-					        AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], (int) sourceId);
-			        }
+				        if (tDmg == 0) continue;
+
+				        int actId = GetCharacterActorId();
+				        int charaPet = FindCharaPet();
+
+						// if source text is enabled, we know exactly when to add it
+						if (configuration.SourceTextEnabled && ((int) tTarget == actId || configuration.PetSourceTextEnabled && sourceId == charaPet)) {
+					        AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], sourceId);
+				        } else if (configuration.OutgoingColorEnabled && (sourceId == actId || configuration.PetDamageColorEnabled && sourceId == charaPet)) {
+							AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], sourceId);
+						} else if ((int) tTarget == actId && configuration.IncomingColorEnabled) {
+							AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], sourceId);
+						}
+					}
 		        }
-	        } catch (Exception e) {
-		        PluginLog.Log($"{e.Message} {e.StackTrace}");
-	        } finally {
 		        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
-			}
+			} catch (Exception e) {
+		        PluginLog.Log($"{e.Message} {e.StackTrace}");
+	        }
         }
 
         // private unsafe void WriteNextEight(IntPtr position) {
