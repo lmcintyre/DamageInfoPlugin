@@ -1,4 +1,4 @@
-﻿using Dalamud.Game.Command;
+using Dalamud.Game.Command;
 using Dalamud.Plugin;
 using System;
 using System.Collections.Concurrent;
@@ -312,13 +312,16 @@ namespace DamageInfoPlugin
         }
 
         public ulong GetCharacterActorId() {
-	        return (ulong) pi.ClientState.LocalPlayer.ActorId;
+	        if (pi.ClientState.LocalPlayer != null)
+		        return (ulong) pi.ClientState.LocalPlayer.ActorId;
+	        return 0;
         }
 
         public string GetActorName(int id) {
 	        foreach (Dalamud.Game.ClientState.Actors.Types.Actor t in pi.ClientState.Actors)
-		        if (id == t.ActorId)
-			        return t.Name;
+				if (t != null)
+			        if (id == t.ActorId)
+				        return t.Name;
 	        return "";
         }
 
@@ -337,87 +340,99 @@ namespace DamageInfoPlugin
 	        IntPtr text2,
 	        float unk3
         ) {
-			uint tColor = color;
-   
-	        if (Hijack)
-	        {
-		        string hjText1 = Marshal.PtrToStringAnsi(hijackStruct.text1);
-		        string hjText2 = Marshal.PtrToStringAnsi(hijackStruct.text2);
-   
-		        FlyTextLog($"flytext hijacked: kind: {hijackStruct.kind}, val1: {hijackStruct.val1}, val2: {hijackStruct.val2}, color: {hijackStruct.color:X}, icon: {hijackStruct.icon}");
-		        FlyTextLog($"text1: {hjText1} | text2: {hjText2}");
-   
-		        return createFlyTextHook.Original(flyTextMgr, hijackStruct.kind, hijackStruct.val1, hijackStruct.val2, hijackStruct.text1, hijackStruct.color, hijackStruct.icon, hijackStruct.text2, unk3);
-	        }
-   
-	        FlyTextKind ftKind = (FlyTextKind)kind;
-   
-	        // wrap this here to lower overhead when not logging
-	        if (configuration.FlyTextLogEnabled)
-	        {
-		        string strText1 = Marshal.PtrToStringAnsi(text1);
-		        string strText2 = Marshal.PtrToStringAnsi(text2);
-   
-		        strText1 = strText1?.Replace("%", "%%");
-		        strText2 = strText2?.Replace("%", "%%");
-                
-                FlyTextLog($"flytext created: kind: {ftKind}, val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
-		        FlyTextLog($"text1: {strText1} | text2: {strText2}");
-	        }
+	        uint tColor = color;
+			try {
+				if (Hijack)
+				{
+					string hjText1 = Marshal.PtrToStringAnsi(hijackStruct.text1);
+					string hjText2 = Marshal.PtrToStringAnsi(hijackStruct.text2);
 
-	        if (TryGetFlyTextDamageType(val1, out DamageType dmgType, out int sourceId)) {
-		        if (configuration.TextColoringEnabled)
-		        {
-			        if (ftKind == FlyTextKind.AutoAttack
-			            || ftKind == FlyTextKind.CriticalHit
-			            || ftKind == FlyTextKind.DirectHit
-			            || ftKind == FlyTextKind.CriticalDirectHit
-			            || ftKind == FlyTextKind.NamedAttack
-			            || ftKind == FlyTextKind.NamedDirectHit
-			            || ftKind == FlyTextKind.NamedCriticalHit
-			            || ftKind == FlyTextKind.NamedCriticalDirectHit) {
-				        switch (dmgType) {
-					        case DamageType.Physical:
-						        tColor = ImGui.GetColorU32(configuration.PhysicalColor);
-						        break;
-					        case DamageType.Magic:
-						        tColor = ImGui.GetColorU32(configuration.MagicColor);
-						        break;
-					        case DamageType.Darkness:
-						        tColor = ImGui.GetColorU32(configuration.DarknessColor);
-						        break;
-				        }
-			        }
-		        }
+					FlyTextLog($"flytext hijacked: kind: {hijackStruct.kind}, val1: {hijackStruct.val1}, val2: {hijackStruct.val2}, color: {hijackStruct.color:X}, icon: {hijackStruct.icon}");
+					FlyTextLog($"text1: {hjText1} | text2: {hjText2}");
 
-		        if (configuration.SourceTextEnabled && sourceId != (int) GetCharacterActorId()) {
-			        string name = GetActorName(sourceId);
-			        if (!string.IsNullOrEmpty(name)) {
-				        string existingText = "";
-				        if (text1 != IntPtr.Zero)
-					        existingText = Marshal.PtrToStringAnsi(text1);
+					return createFlyTextHook.Original(flyTextMgr, hijackStruct.kind, hijackStruct.val1, hijackStruct.val2, hijackStruct.text1, hijackStruct.color, hijackStruct.icon, hijackStruct.text2, unk3);
+				}
 
-				        string combined = $"from {name} {existingText}";
-				        text1 = Marshal.StringToHGlobalAnsi(combined);
-                        text.Enqueue(new Tuple<IntPtr, long>(text1, Ms()));
-			        }
-		        }
-            }
+				FlyTextKind ftKind = (FlyTextKind)kind;
 
-	        return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
-        }
+				// wrap this here to lower overhead when not logging
+				if (configuration.FlyTextLogEnabled)
+				{
+					string strText1 = Marshal.PtrToStringAnsi(text1);
+					string strText2 = Marshal.PtrToStringAnsi(text2);
+
+					strText1 = strText1?.Replace("%", "%%");
+					strText2 = strText2?.Replace("%", "%%");
+
+					FlyTextLog($"flytext created: kind: {ftKind}, val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
+					FlyTextLog($"text1: {strText1} | text2: {strText2}");
+				}
+
+				if (TryGetFlyTextDamageType(val1, out DamageType dmgType, out int sourceId))
+				{
+					if (configuration.TextColoringEnabled)
+					{
+						if (ftKind == FlyTextKind.AutoAttack
+							|| ftKind == FlyTextKind.CriticalHit
+							|| ftKind == FlyTextKind.DirectHit
+							|| ftKind == FlyTextKind.CriticalDirectHit
+							|| ftKind == FlyTextKind.NamedAttack
+							|| ftKind == FlyTextKind.NamedDirectHit
+							|| ftKind == FlyTextKind.NamedCriticalHit
+							|| ftKind == FlyTextKind.NamedCriticalDirectHit)
+						{
+							switch (dmgType)
+							{
+								case DamageType.Physical:
+									tColor = ImGui.GetColorU32(configuration.PhysicalColor);
+									break;
+								case DamageType.Magic:
+									tColor = ImGui.GetColorU32(configuration.MagicColor);
+									break;
+								case DamageType.Darkness:
+									tColor = ImGui.GetColorU32(configuration.DarknessColor);
+									break;
+							}
+						}
+					}
+
+					if (configuration.SourceTextEnabled && sourceId != (int)GetCharacterActorId())
+					{
+						string name = GetActorName(sourceId);
+						if (!string.IsNullOrEmpty(name))
+						{
+							string existingText = "";
+							if (text1 != IntPtr.Zero)
+								existingText = Marshal.PtrToStringAnsi(text1);
+
+							string combined = $"from {name} {existingText}";
+							text1 = Marshal.StringToHGlobalAnsi(combined);
+							text.Enqueue(new Tuple<IntPtr, long>(text1, Ms()));
+						}
+					}
+				}
+
+			} catch (Exception e) {
+		        PluginLog.Log($"{e.Message} {e.StackTrace}");
+			}
+
+		    return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
+
+		}
    
         public unsafe delegate void ReceiveActionEffectDelegate(ulong sourceId, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
    
         public unsafe void ReceiveActionEffect(ulong sourceId, IntPtr sourceCharacter, IntPtr unk3,
 										        IntPtr packet,
 										        IntPtr unk4, IntPtr unk5, IntPtr unk6) {
-	        Cleanup();
-            // no log, no processing... just get him outta here
-            if ((!configuration.EffectLogEnabled && !configuration.TextColoringEnabled)){
-		        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
-		        return;
-	        }
+	        try {
+		        Cleanup();
+		        // no log, no processing... just get him outta here
+		        if ((!configuration.EffectLogEnabled && !configuration.TextColoringEnabled &&
+		             !configuration.SourceTextEnabled)) {
+			        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
+			        return;
+		        }
 
 #if DEBUG
             EffectLog($"p1: {sourceId}");
@@ -431,78 +446,93 @@ namespace DamageInfoPlugin
             EffectLog($"packet at {packet.ToInt64():X}");
 #endif
 
-			uint id = *((uint*)packet.ToPointer() + 0x2);
-			ushort op = *((ushort*) packet.ToPointer() - 0x7);
-			byte targetCount = *(byte*) (packet + 0x21);
-            EffectLog($"--- source actor: {sourceId}, action id {id}, opcode: {op:X} numTargets: {targetCount} ---");
-   
-            IntPtr effectsPtr = packet + 0x2A;
+		        uint id = *((uint*) packet.ToPointer() + 0x2);
+		        ushort op = *((ushort*) packet.ToPointer() - 0x7);
+		        byte targetCount = *(byte*) (packet + 0x21);
+		        EffectLog(
+			        $"--- source actor: {sourceId}, action id {id}, opcode: {op:X} numTargets: {targetCount} ---");
 
-            int effectsEntries = 0;
-            int targetEntries = 1;
-            if (targetCount == 0) {
-	            effectsEntries = 0;
-	            targetEntries = 1;
-            } else if (targetCount == 1) {
-	            effectsEntries = 8;
-	            targetEntries = 1;
-            } else if (targetCount <= 8) {
-	            effectsEntries = 64;
-	            targetEntries = 8;
-            } else if (targetCount <= 16) {
-	            effectsEntries = 128;
-	            targetEntries = 16;
-            } else if (targetCount <= 24) {
-	            effectsEntries = 192;
-	            targetEntries = 24;
-            } else if (targetCount <= 32) {
-	            effectsEntries = 256;
-	            targetEntries = 32;
-            }
+		        IntPtr effectsPtr = packet + 0x2A;
 
-            List<EffectEntry> entries = new List<EffectEntry>(effectsEntries);
-   
-            for (int i = 0; i < effectsEntries; i++) {
-                entries.Add(*(EffectEntry*)effectsPtr);
-                effectsPtr += 8;
-            }
-            
-            effectsPtr += 6;
-            ulong[] targets = new ulong[targetEntries];
-			
-            for (int i = 0; i < targetCount; i++) {
-	            targets[i] = *(ulong*) effectsPtr;
-                effectsPtr += 8;
-            }
+		        int effectsEntries = 0;
+		        int targetEntries = 1;
+		        if (targetCount == 0) {
+			        effectsEntries = 0;
+			        targetEntries = 1;
+		        }
+		        else if (targetCount == 1) {
+			        effectsEntries = 8;
+			        targetEntries = 1;
+		        }
+		        else if (targetCount <= 8) {
+			        effectsEntries = 64;
+			        targetEntries = 8;
+		        }
+		        else if (targetCount <= 16) {
+			        effectsEntries = 128;
+			        targetEntries = 16;
+		        }
+		        else if (targetCount <= 24) {
+			        effectsEntries = 192;
+			        targetEntries = 24;
+		        }
+		        else if (targetCount <= 32) {
+			        effectsEntries = 256;
+			        targetEntries = 32;
+		        }
 
-            for (int i = 0; i < entries.Count; i++) {
-		        ulong tTarget = targets[i / 8];
-		        uint tDmg = entries[i].value;
-	            if (entries[i].mult != 0)
-		            tDmg += (uint) ushort.MaxValue * entries[i].mult;
+		        List<EffectEntry> entries = new List<EffectEntry>(effectsEntries);
 
-	            if (entries[i].type == ActionEffectType.Damage
-	                || entries[i].type == ActionEffectType.BlockedDamage
-	                || entries[i].type == ActionEffectType.ParriedDamage
-                    // || entries[i].type == ActionEffectType.Miss
-				) {
-		            EffectLog($"{entries[i]}, s: {sourceId} t: {tTarget}");
+		        for (int i = 0; i < effectsEntries; i++) {
+			        entries.Add(*(EffectEntry*) effectsPtr);
+			        effectsPtr += 8;
+		        }
 
-		            if (configuration.TextColoringEnabled
-		                && (sourceId == GetCharacterActorId() || tTarget == GetCharacterActorId())
-		                && tDmg != 0)
-			            AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], (int) sourceId);
-                }
-            }
-            receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
+		        effectsPtr += 6;
+		        ulong[] targets = new ulong[targetEntries];
+
+		        for (int i = 0; i < targetCount; i++) {
+			        targets[i] = *(ulong*) effectsPtr;
+			        effectsPtr += 8;
+		        }
+
+		        for (int i = 0; i < entries.Count; i++) {
+			        ulong tTarget = targets[i / 8];
+			        uint tDmg = entries[i].value;
+			        if (entries[i].mult != 0)
+				        tDmg += (uint) ushort.MaxValue * entries[i].mult;
+
+			        if (entries[i].type == ActionEffectType.Damage
+			            || entries[i].type == ActionEffectType.BlockedDamage
+			            || entries[i].type == ActionEffectType.ParriedDamage
+				        // || entries[i].type == ActionEffectType.Miss
+			        ) {
+				        EffectLog($"{entries[i]}, s: {sourceId} t: {tTarget}");
+
+				        ulong actId = GetCharacterActorId();
+				        if ((configuration.TextColoringEnabled || configuration.SourceTextEnabled)
+				            && (sourceId == actId || tTarget == actId)
+				            && tDmg != 0)
+					        AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], (int) sourceId);
+			        }
+		        }
+	        } catch (Exception e) {
+		        PluginLog.Log($"{e.Message} {e.StackTrace}");
+	        } finally {
+		        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
+			}
         }
 
-        private unsafe void WriteNextEight(IntPtr position) {
-	        string write = "";
-	        for (int i = 0; i < 8; i++)
-		        write += $"{*((byte*)position + i):X2} ";
-	        EffectLog(write);
-        }
+        // private unsafe void WriteNextEight(IntPtr position) {
+	       //  string write = "";
+	       //  for (int i = 0; i < 8; i++)
+		      //   write += $"{*((byte*)position + i):X2} ";
+	       //  EffectLog(write);
+        // }
+
+   //      private void CreateMessageLog(string str) {
+			// PluginLog.Log($"[createmessage] {str}");
+   //      }
         
 		private void EffectLog(string str)
 		{
@@ -596,6 +626,11 @@ namespace DamageInfoPlugin
 
 	        FlyTextLog($"post-cleanup flytext: {futureFlyText.Values.Count}");
 	        FlyTextLog($"post-cleanup text: {text.Count}");
+        }
+
+        public void ClearTextPtrs() {
+	        while (text.TryDequeue(out var tup))
+		        Marshal.FreeHGlobal(tup.Item1);
         }
 
 		public void ClearFlyTextQueue() {
