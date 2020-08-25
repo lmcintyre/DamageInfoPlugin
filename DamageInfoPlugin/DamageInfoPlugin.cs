@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
 using Dalamud.Hooking;
@@ -263,18 +264,30 @@ namespace DamageInfoPlugin
             
                 actionToDamageTypeDict.Add(row.RowId, tmpType);
             }
-            
-            IntPtr createFlyTextFuncPtr = pi.TargetModuleScanner.ScanText(
-	            "48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 40 48 63 FA 45 8B F0 48 8B F1 83 FF 34 7C 13 33 C0 48 8B 74 24 ?? 48 8B 7C 24 ?? 48 83 C4 40 41 5E C3");
-            createFlyTextHook = new Hook<CreateFlyTextDelegate>(createFlyTextFuncPtr, (CreateFlyTextDelegate) CreateFlyText);
-            createFlyTextHook.Enable();
-            
-            IntPtr receiveActionEffectFuncPtr = pi.TargetModuleScanner.ScanText(
-	            "4C 89 44 24 18 53 56 57 41 54 41 57 48 81 EC ?? 00 00 00 8B F9");
-            receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, (ReceiveActionEffectDelegate) ReceiveActionEffect);
-            receiveActionEffectHook.Enable();
 
-            pi.UiBuilder.OnBuildUi += DrawUI;
+            try {
+	            IntPtr createFlyTextFuncPtr = pi.TargetModuleScanner.ScanText(
+		            "48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 40 48 63 FA 45 8B F0 48 8B F1 83 FF 34 7C 13 33 C0 48 8B 74 24 ?? 48 8B 7C 24 ?? 48 83 C4 40 41 5E C3");
+	            createFlyTextHook = new Hook<CreateFlyTextDelegate>(createFlyTextFuncPtr, (CreateFlyTextDelegate) CreateFlyText);
+	            
+	            IntPtr receiveActionEffectFuncPtr = pi.TargetModuleScanner.ScanText("4C 89 44 24 18 53 56 57 41 54 41 57 48 81 EC ?? 00 00 00 8B F9");
+	            receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, (ReceiveActionEffectDelegate) ReceiveActionEffect);
+            } catch (Exception ex) {
+				PluginLog.Log($"Encountered an error loading DamageInfoPlugin: {ex.Message}");
+				PluginLog.Log("Plugin will not be loaded.");
+
+				createFlyTextHook?.Disable();
+				createFlyTextHook?.Dispose();
+				receiveActionEffectHook?.Disable();
+				receiveActionEffectHook?.Dispose();
+
+				throw;
+            }
+
+            createFlyTextHook.Enable();
+			receiveActionEffectHook.Enable();
+
+			pi.UiBuilder.OnBuildUi += DrawUI;
             pi.UiBuilder.OnOpenConfigUi += (sender, args) => DrawConfigUI();
         }
 
@@ -485,21 +498,23 @@ namespace DamageInfoPlugin
 			        return;
 		        }
 
-#if DEBUG
-	            EffectLog($"p1: {sourceId}");
-	            EffectLog($"p2: {sourceCharacter.ToInt64():X}");
-	            EffectLog($"p3: {unk3.ToInt64():X}");
-	            EffectLog($"p4: {unk4.ToInt64():X}");
-	            EffectLog($"p5: {unk5.ToInt64():X}");
-	            EffectLog($"p6: {unk6.ToInt64():X}");
-	            EffectLog($"packet at {packet.ToInt64():X}");
-#endif
-
 		        uint id = *((uint*) packet.ToPointer() + 0x2);
+		        uint animId = *((ushort*) packet.ToPointer() + 0xE);
 		        ushort op = *((ushort*) packet.ToPointer() - 0x7);
 		        byte targetCount = *(byte*) (packet + 0x21);
-		        EffectLog(
-			        $"--- source actor: {sourceId}, action id {id}, opcode: {op:X} numTargets: {targetCount} ---");
+		        EffectLog($"--- source actor: {sourceId}, action id {id}, anim id {animId}, opcode: {op:X} numTargets: {targetCount} ---");
+
+#if DEBUG
+		        if (configuration.EffectLogEnabled)
+		        {
+					StringBuilder sb = new StringBuilder();
+					for (int i = 0; i < 64; i++)
+					{
+						sb.Append($"{*((byte*) packet.ToPointer() + i):X2} ");
+					}
+					EffectLog(sb.ToString());
+		        }
+#endif
 
 		        IntPtr effectsPtr = packet + 0x2A;
 
@@ -565,11 +580,11 @@ namespace DamageInfoPlugin
 
 						// if source text is enabled, we know exactly when to add it
 						if (configuration.SourceTextEnabled && ((int) tTarget == actId || configuration.PetSourceTextEnabled && sourceId == charaPet)) {
-					        AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], sourceId);
+					        AddToFutureFlyText(tDmg, actionToDamageTypeDict[animId], sourceId);
 				        } else if (configuration.OutgoingColorEnabled && (sourceId == actId || configuration.PetDamageColorEnabled && sourceId == charaPet)) {
-							AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], sourceId);
+							AddToFutureFlyText(tDmg, actionToDamageTypeDict[animId], sourceId);
 						} else if ((int) tTarget == actId && configuration.IncomingColorEnabled) {
-							AddToFutureFlyText(tDmg, actionToDamageTypeDict[id], sourceId);
+							AddToFutureFlyText(tDmg, actionToDamageTypeDict[animId], sourceId);
 						}
 					}
 		        }
