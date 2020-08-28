@@ -504,17 +504,23 @@ namespace DamageInfoPlugin
 		        byte targetCount = *(byte*) (packet + 0x21);
 		        EffectLog($"--- source actor: {sourceId}, action id {id}, anim id {animId}, opcode: {op:X} numTargets: {targetCount} ---");
 
-#if DEBUG
+// #if DEBUG
 		        if (configuration.EffectLogEnabled)
 		        {
 					StringBuilder sb = new StringBuilder();
-					for (int i = 0; i < 64; i++)
+					for (int i = 0; i < 512; i++)
 					{
-						sb.Append($"{*((byte*) packet.ToPointer() + i):X2} ");
+						sb.Append($"{*((byte*)packet.ToPointer() + i):X2} ");
 					}
-					EffectLog(sb.ToString());
+					EffectLog($"dump1: {sb}");
+					sb = sb.Clear();
+					for (int i = 512; i < 1024; i++)
+					{
+						sb.Append($"{*((byte*)packet.ToPointer() + i):X2} ");
+					}
+					EffectLog($"dump2: {sb}");
 		        }
-#endif
+// #endif
 
 		        IntPtr effectsPtr = packet + 0x2A;
 
