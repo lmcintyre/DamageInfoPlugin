@@ -14,6 +14,7 @@ namespace DamageInfoPlugin
         private Configuration configuration;
         private DamageInfoPlugin damageInfoPlugin;
 
+        private bool randomize = false;
         private int kind, val1, val2, icon;
         private Vector4 color;
         private byte[] text1 = new byte[32];
@@ -62,7 +63,7 @@ namespace DamageInfoPlugin
         {
 	        if (!Visible) return;
 
-	        ImGui.SetNextWindowSize(new Vector2(400, 350), ImGuiCond.FirstUseEver);
+	        ImGui.SetNextWindowSize(new Vector2(400, 380), ImGuiCond.FirstUseEver);
 	        ImGui.SetNextWindowSizeConstraints(new Vector2(400, 200), new Vector2(float.MaxValue, float.MaxValue));
 	        if (ImGui.Begin("DamageInfoDebug", ref this.visible, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)) {
 		        bool hijack = damageInfoPlugin.Hijack;
@@ -73,6 +74,11 @@ namespace DamageInfoPlugin
 		        if (ImGui.Button("Show Settings"))
 		        {
 			        SettingsVisible = true;
+		        }
+
+		        if (ImGui.Checkbox("Randomize Damage", ref randomize))
+		        {
+			        damageInfoPlugin.Randomize = true;
 		        }
 
 		        ImGui.Spacing();

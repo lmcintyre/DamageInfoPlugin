@@ -10,7 +10,6 @@ using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
 using Dalamud.Hooking;
 using ImGuiNET;
-using Lumina.Excel.GeneratedSheets;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 
 namespace DamageInfoPlugin
@@ -231,6 +230,7 @@ namespace DamageInfoPlugin
         private PluginUI ui;
 
         public bool Hijack { get; set; }
+        public bool Randomize { get; set; }
         public HijackStruct hijackStruct { get; set; }
         
         private Hook<CreateFlyTextDelegate> createFlyTextHook;
@@ -387,6 +387,14 @@ namespace DamageInfoPlugin
 	        float unk3
         ) {
 	        uint tColor = color;
+	        uint tVal1 = val1;
+
+	        if (Randomize)
+	        {
+		        int ttVal1 = ModifyDamageALittle((int) val1);
+		        tVal1 = (uint) ttVal1;
+	        }
+	        
 			try {
 				if (Hijack)
 				{
@@ -410,11 +418,11 @@ namespace DamageInfoPlugin
 					strText1 = strText1?.Replace("%", "%%");
 					strText2 = strText2?.Replace("%", "%%");
 
-					FlyTextLog($"flytext created: kind: {ftKind}, val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
+					FlyTextLog($"flytext created: kind: {ftKind}, val1: {tVal1}, val2: {val2}, color: {color:X}, icon: {icon}");
 					FlyTextLog($"text1: {strText1} | text2: {strText2}");
 				}
 
-				if (TryGetFlyTextDamageType(val1, out DamageType dmgType, out int sourceId))
+				if (TryGetFlyTextDamageType(tVal1, out DamageType dmgType, out int sourceId))
 				{
 					int charaId = GetCharacterActorId();
 					int petId = FindCharaPet();
@@ -481,48 +489,44 @@ namespace DamageInfoPlugin
 			} catch (Exception e) {
 		        PluginLog.Log($"{e.Message} {e.StackTrace}");
 			}
-			return createFlyTextHook.Original(flyTextMgr, kind, val1, val2, text1, tColor, icon, text2, unk3);
+			return createFlyTextHook.Original(flyTextMgr, kind, tVal1, val2, text1, tColor, icon, text2, unk3);
 		}
    
-        public delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr unk2, IntPtr unk3, IntPtr packet, IntPtr unk4, IntPtr unk5, IntPtr unk6);
+        public delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr sourceCharacter, IntPtr pos, IntPtr effectHeader, IntPtr effectArray, IntPtr effectTrail);
    
-        public unsafe void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr unk3,
-										        IntPtr packet,
-										        IntPtr unk4, IntPtr unk5, IntPtr unk6) {
+        public unsafe void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr pos,
+										        IntPtr effectHeader,
+										        IntPtr effectArray, IntPtr effectTrail) {
 	        try {
 		        Cleanup();
 		        // no log, no processing... just get him outta here
 		        if ((!configuration.EffectLogEnabled && !(configuration.IncomingColorEnabled || configuration.OutgoingColorEnabled) &&
 		             !configuration.SourceTextEnabled)) {
-			        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
+			        receiveActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray, effectTrail);
 			        return;
 		        }
 
-		        uint id = *((uint*) packet.ToPointer() + 0x2);
-		        uint animId = *((ushort*) packet.ToPointer() + 0xE);
-		        ushort op = *((ushort*) packet.ToPointer() - 0x7);
-		        byte targetCount = *(byte*) (packet + 0x21);
+		        uint id = *((uint*) effectHeader.ToPointer() + 0x2);
+		        uint animId = *((ushort*) effectHeader.ToPointer() + 0xE);
+		        ushort op = *((ushort*) effectHeader.ToPointer() - 0x7);
+		        byte targetCount = *(byte*) (effectHeader + 0x21);
 		        EffectLog($"--- source actor: {sourceId}, action id {id}, anim id {animId}, opcode: {op:X} numTargets: {targetCount} ---");
 
 // #if DEBUG
 		        if (configuration.EffectLogEnabled)
 		        {
-					StringBuilder sb = new StringBuilder();
-					for (int i = 0; i < 512; i++)
-					{
-						sb.Append($"{*((byte*)packet.ToPointer() + i):X2} ");
-					}
-					EffectLog($"dump1: {sb}");
-					sb = sb.Clear();
-					for (int i = 512; i < 1024; i++)
-					{
-						sb.Append($"{*((byte*)packet.ToPointer() + i):X2} ");
-					}
-					EffectLog($"dump2: {sb}");
+			        // EffectLog($"packet (effectHeader): {effectHeader.ToInt64():X}");
+			        // LogFromPtr(effectHeader, 1024);
+			        //
+			        // EffectLog($"effectArray: {effectArray.ToInt64():X}");
+			        // LogFromPtr(effectArray, 64);
+			        //
+			        // EffectLog($"effectTrail: {effectTrail.ToInt64():X}");
+			        // LogFromPtr(effectTrail, 64);
+			        
+			        // LogFromPtr(unk6, 64);
 		        }
 // #endif
-
-		        IntPtr effectsPtr = packet + 0x2A;
 
 		        int effectsEntries = 0;
 		        int targetEntries = 1;
@@ -554,23 +558,20 @@ namespace DamageInfoPlugin
 		        List<EffectEntry> entries = new List<EffectEntry>(effectsEntries);
 
 		        for (int i = 0; i < effectsEntries; i++) {
-			        entries.Add(*(EffectEntry*) effectsPtr);
-			        effectsPtr += 8;
+			        entries.Add(*(EffectEntry*) (effectArray + i * 8));
 		        }
 
-		        effectsPtr += 6;
 		        ulong[] targets = new ulong[targetEntries];
 
 		        for (int i = 0; i < targetCount; i++) {
-			        targets[i] = *(ulong*) effectsPtr;
-			        effectsPtr += 8;
+			        targets[i] = *(ulong*) (effectTrail + i * 8);
 		        }
 
 		        for (int i = 0; i < entries.Count; i++) {
 			        ulong tTarget = targets[i / 8];
 			        uint tDmg = entries[i].value;
 			        if (entries[i].mult != 0)
-				        tDmg += (uint) ushort.MaxValue * entries[i].mult;
+				        tDmg += ((uint) ushort.MaxValue + 1) * entries[i].mult;
 
 			        if (entries[i].type == ActionEffectType.Damage
 			            || entries[i].type == ActionEffectType.BlockedDamage
@@ -578,7 +579,6 @@ namespace DamageInfoPlugin
 				        // || entries[i].type == ActionEffectType.Miss
 			        ) {
 				        EffectLog($"{entries[i]}, s: {sourceId} t: {tTarget}");
-
 				        if (tDmg == 0) continue;
 
 				        int actId = GetCharacterActorId();
@@ -594,10 +594,31 @@ namespace DamageInfoPlugin
 						}
 					}
 		        }
-		        receiveActionEffectHook.Original(sourceId, sourceCharacter, unk3, packet, unk4, unk5, unk6);
+		        receiveActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray, effectTrail);
 			} catch (Exception e) {
 		        PluginLog.Log($"{e.Message} {e.StackTrace}");
 	        }
+        }
+
+        private unsafe void LogFromPtr(IntPtr ptr, int count)
+        {
+	        if (ptr == IntPtr.Zero)
+	        {
+		        EffectLog("dump{0}: null");
+		        return;
+	        }
+	        
+	        StringBuilder sb = new StringBuilder();
+	        for (int i = 0; i < count / 512 + 1; i++)
+	        {
+		        var bytesLeft = count - i * 512;
+		        var theseBytes = bytesLeft > 512 ? 512 : bytesLeft;
+		        for (int j = 0; j < theseBytes; j++)
+			        sb.Append($"{*((byte*)ptr.ToPointer() + (i * 512) + j):X2} ");
+		        EffectLog($"dump{i}: {sb}");
+		        sb.Clear();
+	        }
+	        
         }
 
         // private unsafe void WriteNextEight(IntPtr position) {
@@ -715,6 +736,14 @@ namespace DamageInfoPlugin
 
 			FlyTextLog($"clearing flytext queue of {futureFlyText.Values.Count} items...");
 			futureFlyText.Clear();
+		}
+
+		private int ModifyDamageALittle(int originalDamage)
+		{
+			var margin = (int) Math.Truncate(originalDamage * 0.1);
+			var rand = new Random(originalDamage);
+			var newDamage = rand.Next(originalDamage - margin, originalDamage + margin);
+			return newDamage;
 		}
     }
 }
