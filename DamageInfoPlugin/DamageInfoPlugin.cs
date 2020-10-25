@@ -3,7 +3,6 @@ using Dalamud.Plugin;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud.Game.ClientState.Actors.Types;
@@ -22,11 +21,15 @@ namespace DamageInfoPlugin
         private const int ActorCastOffset = 6884;
         private const int AtkResNodeGaugeColorOffset = 112;
         
-        private const int TargetInfoGaugeOffset = 568;
-        private const int TargetInfoGaugeBgOffset = 576;
+        private const int TargetInfoGaugeOffset = 688;
+        private const int TargetInfoGaugeBgOffset = 696;
         
-        private const int FocusTargetInfoGaugeOffset = 568;
-        private const int FocusTargetInfoGaugeShadowOffset = 576;
+        private const int TargetInfoSplitGaugeOffset = 568;
+        private const int TargetInfoSplitGaugeBgOffset = 576;
+        
+        private const int FocusTargetInfoGaugeParentOffset = 568;
+        private const int FocusTargetInfoGaugeOffsetFromParent = 56;
+        private const int FocusTargetInfoGaugeShadowOffset = 584;
         
         public string Name => "Damage Info";
 
@@ -42,10 +45,12 @@ namespace DamageInfoPlugin
 
         private Hook<CreateFlyTextDelegate> createFlyTextHook;
         private Hook<ReceiveActionEffectDelegate> receiveActionEffectHook;
-        private Hook<SetScaleXDelegate> setScaleXHook;
+        
         private Hook<SetCastBarDelegate> setCastBarHook;
+        private Hook<SetCastBarDelegate> setFocusTargetCastBarHook;
 
         private Dictionary<uint, DamageType> actionToDamageTypeDict;
+        private HashSet<uint> ignoredCastActions;
         private ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>> futureFlyText;
         private ConcurrentQueue<Tuple<IntPtr, long>> text;
         private long lastCleanup;
@@ -56,6 +61,7 @@ namespace DamageInfoPlugin
             actionToDamageTypeDict = new Dictionary<uint, DamageType>();
             futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>>();
             text = new ConcurrentQueue<Tuple<IntPtr, long>>();
+            ignoredCastActions = new HashSet<uint>();
 
             pi = pluginInterface;
 
@@ -67,13 +73,16 @@ namespace DamageInfoPlugin
                 {HelpMessage = "Display the Damage Info configuration interface."});
 
             var actionSheet = pi.Data.GetExcelSheet<Action>();
-            foreach (var row in actionSheet.ToList())
+            foreach (var row in actionSheet)
             {
                 DamageType tmpType = (DamageType) row.AttackType.Row;
-                if (tmpType != DamageType.Magic && tmpType != DamageType.Darkness)
+                if (tmpType != DamageType.Magic && tmpType != DamageType.Darkness && tmpType != DamageType.Unknown)
                     tmpType = DamageType.Physical;
 
                 actionToDamageTypeDict.Add(row.RowId, tmpType);
+                
+                if (row.ActionCategory.Row > 4 && row.ActionCategory.Row < 11)
+                    ignoredCastActions.Add(row.ActionCategory.Row);
             }
 
             try
@@ -88,13 +97,12 @@ namespace DamageInfoPlugin
                 receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr,
                     (ReceiveActionEffectDelegate) ReceiveActionEffect);
 
-                // IntPtr setScaleXFuncPtr = pi.TargetModuleScanner.ScanText("48 85 C9 74 5D 8B 81 ?? ?? ?? ?? A8 01 75 15 F3 0F 10 41 ?? 0F 2E C1 7A 02 74 09 83 C8 01 89 81 ?? ?? ?? ?? F3 0F 10 15 ?? ?? ?? ?? 0F 2E CA");
-                // IntPtr setScaleXFuncPtr = pi.TargetModuleScanner.ScanText("E8 ?? ?? ?? ?? 48 8B 55 20 48 8B 4B 08 48 8B 92 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 46 20 83 B8 ?? ?? ?? ?? ??");
-                // setScaleXHook = new Hook<SetScaleXDelegate>(setScaleXFuncPtr, (SetScaleXDelegate) SetScaleXDetour);
-
                 IntPtr setCastBarFuncPtr = pi.TargetModuleScanner.ScanText(
                     "48 89 5C 24 ?? 48 89 6C 24 ?? 56 48 83 EC 20 80 7C 24 ?? ?? 49 8B D9 49 8B E8 48 8B F2 74 22 49 8B 09 66 41 C7 41 ?? ?? ?? E8 ?? ?? ?? ?? 66 83 F8 69 75 0D 48 8B 0B BA ?? ?? ?? ?? E8 ?? ?? ?? ??");
                 setCastBarHook = new Hook<SetCastBarDelegate>(setCastBarFuncPtr, (SetCastBarDelegate) SetCastBarDetour);
+                
+                IntPtr setFocusTargetCastBarFuncPtr = pi.TargetModuleScanner.ScanText("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 41 0F B6 F9 49 8B E8 48 8B F2 48 8B D9");
+                setFocusTargetCastBarHook = new Hook<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, (SetCastBarDelegate) SetFocusTargetCastBarDetour);
             }
             catch (Exception ex)
             {
@@ -105,18 +113,18 @@ namespace DamageInfoPlugin
                 createFlyTextHook?.Dispose();
                 receiveActionEffectHook?.Disable();
                 receiveActionEffectHook?.Dispose();
-                // setScaleXHook?.Disable();
-                // setScaleXHook?.Dispose();
                 setCastBarHook?.Disable();
                 setCastBarHook?.Dispose();
+                setFocusTargetCastBarHook?.Disable();
+                setFocusTargetCastBarHook?.Dispose();
 
                 throw;
             }
 
             createFlyTextHook.Enable();
             receiveActionEffectHook.Enable();
-            // setScaleXHook.Enable();
             setCastBarHook.Enable();
+            setFocusTargetCastBarHook.Enable();
 
             pi.UiBuilder.OnBuildUi += DrawUI;
             pi.UiBuilder.OnOpenConfigUi += (sender, args) => DrawConfigUI();
@@ -125,14 +133,16 @@ namespace DamageInfoPlugin
         public void Dispose()
         {
             ClearFlyTextQueue();
+            ResetMainTargetCastBar();
+            ResetFocusTargetCastBar();
             createFlyTextHook.Disable();
             createFlyTextHook.Dispose();
             receiveActionEffectHook.Disable();
             receiveActionEffectHook.Dispose();
-            setScaleXHook?.Disable();
-            setScaleXHook?.Dispose();
             setCastBarHook?.Disable();
             setCastBarHook?.Dispose();
+            setFocusTargetCastBarHook?.Disable();
+            setFocusTargetCastBarHook?.Dispose();
 
             futureFlyText = null;
             actionToDamageTypeDict = null;
@@ -165,14 +175,38 @@ namespace DamageInfoPlugin
         {
             return (ushort) Marshal.ReadInt16(actor, ActorCastOffset);
         }
-
-        public (IntPtr, IntPtr, IntPtr) GetUiElementAddresses()
+        
+        public (IntPtr, IntPtr, IntPtr) GetTargetInfoUiElementAddresses()
         {
-            IntPtr targetInfoCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfoCastBar", 1);
+            IntPtr targetInfoCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfo", 1);
             IntPtr targetInfoCastBarGauge = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeOffset);
             IntPtr targetInfoCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeBgOffset);
 
             return (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg);
+        }
+
+        public (IntPtr, IntPtr, IntPtr) GetTargetInfoSplitUiElementAddresses()
+        {
+            IntPtr targetInfoSplitCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfoCastBar", 1);
+            IntPtr targetInfoSplitCastBarGauge = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeOffset);
+            IntPtr targetInfoSplitCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeBgOffset);
+
+            return (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg);
+        }
+        
+        public (IntPtr, IntPtr, IntPtr) GetFocusTargetUiElementAddresses()
+        {
+            IntPtr focusTargetInfo = pi.Framework.Gui.GetUiObjectByName("_FocusTargetInfo", 1);
+            IntPtr focusTargetInfoCastBarGaugeBgParentPtr = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeParentOffset);
+            IntPtr focusTargetInfoCastBarGaugeBg = Marshal.ReadIntPtr(focusTargetInfoCastBarGaugeBgParentPtr, FocusTargetInfoGaugeOffsetFromParent);
+            IntPtr focusTargetInfoCastBarGauge = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeShadowOffset);
+
+            return (focusTargetInfo, focusTargetInfoCastBarGauge, focusTargetInfoCastBarGaugeBg);
+        }
+
+        public unsafe AtkResNodeColors GetColorsStruct(IntPtr address)
+        {
+            return *(AtkResNodeColors*) address;
         }
 
         public bool IsCharacterPet(int suspectedPet)
@@ -228,82 +262,144 @@ namespace DamageInfoPlugin
             return "";
         }
 
+        public void ResetMainTargetCastBar()
+        {
+            IntPtr targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg;
+            (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg) = GetTargetInfoUiElementAddresses();
+            IntPtr targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg;
+            (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg) = GetTargetInfoSplitUiElementAddresses();
+            
+            IntPtr gaugeColorPtr = IntPtr.Add(targetInfoCastBarGauge, AtkResNodeGaugeColorOffset);
+            IntPtr gaugeBgColorPtr = IntPtr.Add(targetInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
+            IntPtr splitGaugeColorPtr = IntPtr.Add(targetInfoSplitCastBarGauge, AtkResNodeGaugeColorOffset);
+            IntPtr splitGaugeBgColorPtr = IntPtr.Add(targetInfoSplitCastBarGaugeBg, AtkResNodeGaugeColorOffset);
+
+            int white = -1;
+
+            Marshal.WriteInt32(gaugeColorPtr, white);
+            Marshal.WriteInt32(gaugeBgColorPtr, white);
+            Marshal.WriteInt32(splitGaugeColorPtr, white);
+            Marshal.WriteInt32(splitGaugeBgColorPtr, white);
+        }
+
+        public void ResetFocusTargetCastBar()
+        {
+            IntPtr ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg;
+            (ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg) = GetFocusTargetUiElementAddresses();
+
+            IntPtr gaugeColorPtr = IntPtr.Add(ftInfoCastBarGauge, AtkResNodeGaugeColorOffset);
+            IntPtr gaugeBgColorPtr = IntPtr.Add(ftInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
+
+            int white = -1;
+            
+            Marshal.WriteInt32(gaugeColorPtr, white);
+            Marshal.WriteInt32(gaugeBgColorPtr, white);
+        }
+
         private delegate void SetCastBarDelegate(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5);
 
         private void SetCastBarDetour(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
         {
-            IntPtr targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg;
-            (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg) = GetUiElementAddresses();
+            if (!configuration.MainTargetCastBarColorEnabled)
+            {
+                setCastBarHook.Original(thisPtr, a2, a3, a4, a5);
+                return;
+            }
             
-            if (targetInfoCastBar == IntPtr.Zero || targetInfoCastBarGauge == IntPtr.Zero ||
-                targetInfoCastBarGaugeBg == IntPtr.Zero)
+            IntPtr targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg;
+            (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg) = GetTargetInfoUiElementAddresses();
+            
+            IntPtr targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg;
+            (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg) = GetTargetInfoSplitUiElementAddresses();
+
+            bool combinedInvalid = targetInfoCastBar == IntPtr.Zero || targetInfoCastBarGauge == IntPtr.Zero || targetInfoCastBarGaugeBg == IntPtr.Zero;
+            bool splitInvalid = targetInfoSplitCastBar == IntPtr.Zero || targetInfoSplitCastBarGauge == IntPtr.Zero || targetInfoSplitCastBarGaugeBg == IntPtr.Zero;
+            
+            if (combinedInvalid && splitInvalid)
             {
                 setCastBarHook.Original(thisPtr, a2, a3, a4, a5);
                 return;
             }
 
-            if (thisPtr == targetInfoCastBar)
+            if (thisPtr == targetInfoCastBar && !combinedInvalid)
             {
                 IntPtr? mainTarget = pi.ClientState?.Targets?.CurrentTarget?.Address;
-                if (mainTarget.HasValue && mainTarget.Value != IntPtr.Zero)
-                {
-                    ushort actionId = GetCurrentCast(mainTarget.Value);
-                    DamageType type = actionToDamageTypeDict[actionId];
-
-                    IntPtr gaugeColorPtr = IntPtr.Add(targetInfoCastBarGauge, AtkResNodeGaugeColorOffset);
-                    IntPtr gaugeBgColorPtr = IntPtr.Add(targetInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
-                    uint newColor = type switch
-                    {
-                        DamageType.Magic => ImGui.GetColorU32(configuration.MagicColor),
-                        DamageType.Darkness => ImGui.GetColorU32(configuration.DarknessColor),
-                        DamageType.Physical => ImGui.GetColorU32(configuration.PhysicalColor),
-                        _ => uint.MaxValue
-                    };
-
-                    Marshal.WriteInt32(gaugeColorPtr, (int) newColor);
-                    Marshal.WriteInt32(gaugeBgColorPtr, (int) newColor);
-                }
+                ColorCastBar(mainTarget, targetInfoCastBarGauge, targetInfoCastBarGaugeBg, setCastBarHook,
+                    thisPtr, a2, a3, a4, a5);
             }
-
-            setCastBarHook.Original(thisPtr, a2, a3, a4, a5);
+            else if (thisPtr == targetInfoSplitCastBar && !splitInvalid)
+            {
+                IntPtr? mainTarget = pi.ClientState?.Targets?.CurrentTarget?.Address;
+                ColorCastBar(mainTarget, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg, setCastBarHook,
+                    thisPtr, a2, a3, a4, a5);
+            }
         }
 
-        private delegate void SetScaleXDelegate(IntPtr atkResNode, float x);
+        private void SetFocusTargetCastBarDetour(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
+        {
+            if (!configuration.FocusTargetCastBarColorEnabled)
+            {
+                setFocusTargetCastBarHook.Original(thisPtr, a2, a3, a4, a5);
+                return;
+            }
+            
+            IntPtr ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg;
+            (ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg) = GetFocusTargetUiElementAddresses();
+            
+            bool focusTargetInvalid = ftInfoCastBar == IntPtr.Zero || ftInfoCastBarGauge == IntPtr.Zero || ftInfoCastBarGaugeBg == IntPtr.Zero; 
+            
+            if (thisPtr == ftInfoCastBar && !focusTargetInvalid)
+            {
+                IntPtr? focusTarget = pi.ClientState?.Targets?.FocusTarget?.Address;
+                ColorCastBar(focusTarget, ftInfoCastBarGauge, ftInfoCastBarGaugeBg, setFocusTargetCastBarHook,
+                                thisPtr, a2, a3, a4, a5);
+            }
+        }
+        
+        private void ColorCastBar(IntPtr? target, IntPtr gauge, IntPtr bg, Hook<SetCastBarDelegate> hook,
+            IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
+        {
+            if (!target.HasValue || target.Value == IntPtr.Zero)
+            {
+                hook.Original(thisPtr, a2, a3, a4, a5);
+                return;
+            }
+            
+            ushort actionId = GetCurrentCast(target.Value);
+                    
+            IntPtr gaugeColorPtr = IntPtr.Add(gauge, AtkResNodeGaugeColorOffset);
+            IntPtr gaugeBgColorPtr = IntPtr.Add(bg, AtkResNodeGaugeColorOffset);
 
-        // private void SetScaleXDetour(IntPtr atkResNode, float x)
-        // {
-        //     if (targetInfoCastBarGauge == IntPtr.Zero || targetInfoCastBarGaugeBg == IntPtr.Zero)
-        //     {
-        //         setScaleXHook.Original(atkResNode, x);
-        //         return;
-        //     }
-        //
-        //     if (atkResNode == targetInfoCastBarGauge)
-        //     {
-        //         IntPtr? mainTarget = pi.ClientState?.Targets?.CurrentTarget?.Address;
-        //         if (mainTarget.HasValue && mainTarget.Value != IntPtr.Zero)
-        //         {
-        //             ushort actionId = GetCurrentCast(mainTarget.Value);
-        //             DamageType type = actionToDamageTypeDict[actionId];
-        //
-        //             if (type == DamageType.Darkness)
-        //             {
-        //                 IntPtr colorPtr = IntPtr.Add(targetInfoCastBarGauge, AtkResNodeGaugeColorOffset);
-        //                 int newColor = (int) ImGui.GetColorU32(configuration.DarknessColor);
-        //                 Marshal.WriteInt32(colorPtr, newColor);
-        //             } else if (type == DamageType.Magic) {
-        //                 IntPtr colorPtr = IntPtr.Add(targetInfoCastBarGauge, AtkResNodeGaugeColorOffset);
-        //                 int newColor = (int) ImGui.GetColorU32(configuration.MagicColor);
-        //                 Marshal.WriteInt32(colorPtr, newColor);
-        //             } else if (type == DamageType.Physical) {
-        //                 IntPtr colorPtr = IntPtr.Add(targetInfoCastBarGauge, AtkResNodeGaugeColorOffset);
-        //                 int newColor = (int) ImGui.GetColorU32(configuration.PhysicalColor);
-        //                 Marshal.WriteInt32(colorPtr, newColor);
-        //             }
-        //         }
-        //     }
-        // }
-
+            actionToDamageTypeDict.TryGetValue(actionId, out DamageType type);
+            if (ignoredCastActions.Contains(actionId))
+            {
+                Marshal.WriteInt32(gaugeColorPtr, -1);
+                Marshal.WriteInt32(gaugeBgColorPtr, -1);
+                hook.Original(thisPtr, a2, a3, a4, a5);
+                return;
+            }
+                    
+            uint newCastColor = type switch
+            {
+                DamageType.Physical => ImGui.GetColorU32(configuration.PhysicalCastColor),
+                DamageType.Magic => ImGui.GetColorU32(configuration.MagicCastColor),
+                DamageType.Darkness => ImGui.GetColorU32(configuration.DarknessCastColor),
+                _ => uint.MaxValue
+            };
+                    
+            uint newBgColor = type switch
+            {
+                DamageType.Physical => ImGui.GetColorU32(configuration.PhysicalBgColor),
+                DamageType.Magic => ImGui.GetColorU32(configuration.MagicBgColor),
+                DamageType.Darkness => ImGui.GetColorU32(configuration.DarknessBgColor),
+                _ => uint.MaxValue
+            };
+                    
+            Marshal.WriteInt32(gaugeColorPtr, (int) newCastColor);
+            Marshal.WriteInt32(gaugeBgColorPtr, (int) newBgColor);
+            hook.Original(thisPtr, a2, a3, a4, a5);
+        }
+        
         public unsafe delegate IntPtr CreateFlyTextDelegate(IntPtr flyTextMgr,
             UInt32 kind, UInt32 val1, UInt32 val2,
             IntPtr text1, UInt32 color, UInt32 icon, IntPtr text2, float unk3);

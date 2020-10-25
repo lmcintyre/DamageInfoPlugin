@@ -9,6 +9,18 @@ namespace DamageInfoPlugin
     public class Configuration : IPluginConfiguration
     {
         public int Version { get; set; } = 0;
+        
+        public Vector4 PhysicalColor { get; set; } = new Vector4(1, 0, 0, 1);
+        public Vector4 MagicColor { get; set; } = new Vector4(0, 0, 1, 1);
+        public Vector4 DarknessColor { get; set; } = new Vector4(1, 0, 1, 1);
+        
+        public Vector4 PhysicalCastColor { get; set; } = new Vector4(1, 0, 0, 1);
+        public Vector4 MagicCastColor { get; set; } = new Vector4(0, 0, 1, 1);
+        public Vector4 DarknessCastColor { get; set; } = new Vector4(1, 0, 1, 1);
+        
+        public Vector4 PhysicalBgColor { get; set; } = new Vector4(1, 1, 1, 1);
+        public Vector4 MagicBgColor { get; set; } = new Vector4(1, 1, 1, 1);
+        public Vector4 DarknessBgColor { get; set; } = new Vector4(1, 1, 1, 1);
 
         public bool EffectLogEnabled { get; set; } = false;
         public bool FlyTextLogEnabled { get; set; } = false;
@@ -18,6 +30,8 @@ namespace DamageInfoPlugin
         private bool _petDamageColorEnabled = true;
         private bool _sourceTextEnabled = true;
         private bool _petSourceTextEnabled = false;
+        private bool _mainTargetCastBarColorEnabled = true;
+        private bool _focusTargetCastBarColorEnabled = true;
 
         public bool IncomingColorEnabled {
 	        get => _incomingColorEnabled;
@@ -75,10 +89,25 @@ namespace DamageInfoPlugin
 	        }
         }
 
-        public Vector4 PhysicalColor { get; set; } = new Vector4(1, 0, 0, 1);
-        public Vector4 MagicColor { get; set; } = new Vector4(0, 0, 1, 1);
-        public Vector4 DarknessColor { get; set; } = new Vector4(1, 0, 1, 1);
-
+        public bool MainTargetCastBarColorEnabled
+        {
+	        get => _mainTargetCastBarColorEnabled;
+	        set
+	        {
+		        dmgPlugin?.ResetMainTargetCastBar();
+		        _mainTargetCastBarColorEnabled = value;
+	        }
+        }
+        public bool FocusTargetCastBarColorEnabled
+        {
+	        get => _focusTargetCastBarColorEnabled;
+	        set
+	        {
+		        dmgPlugin?.ResetFocusTargetCastBar();
+		        _focusTargetCastBarColorEnabled = value;
+	        }
+        }
+        
         [NonSerialized]
         private DalamudPluginInterface pluginInterface;
 
