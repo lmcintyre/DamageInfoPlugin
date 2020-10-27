@@ -30,8 +30,8 @@ namespace DamageInfoPlugin
         private bool _petDamageColorEnabled = true;
         private bool _sourceTextEnabled = true;
         private bool _petSourceTextEnabled = false;
-        private bool _mainTargetCastBarColorEnabled = true;
-        private bool _focusTargetCastBarColorEnabled = true;
+        private bool _mainTargetCastBarColorEnabled = false;
+        private bool _focusTargetCastBarColorEnabled = false;
 
         public bool IncomingColorEnabled {
 	        get => _incomingColorEnabled;
