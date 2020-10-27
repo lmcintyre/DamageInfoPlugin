@@ -78,7 +78,7 @@ namespace DamageInfoPlugin
 
 		        if (ImGui.Checkbox("Randomize Damage", ref randomize))
 		        {
-			        damageInfoPlugin.Randomize = true;
+			        damageInfoPlugin.Randomize = randomize;
 		        }
 
 		        ImGui.Spacing();
@@ -132,7 +132,7 @@ namespace DamageInfoPlugin
 	        if (!SettingsVisible) return;
 
             ImGui.SetNextWindowSize(new Vector2(400, 500), ImGuiCond.FirstUseEver);
-            if (ImGui.Begin("Damage Info Config", ref settingsVisible)) {
+            if (ImGui.Begin("Damage Info Config", ref settingsVisible, ImGuiWindowFlags.AlwaysVerticalScrollbar)) {
 
                 // local copies of config properties
 	            var lPhys = configuration.PhysicalColor;

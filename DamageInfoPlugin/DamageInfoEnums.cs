@@ -31,139 +31,139 @@
     public enum FlyTextKind
     {
         // val1 in serif font, text1 sans-serif as subtitle
-        AutoAttack, // used for autoas and incoming DoT damage
+        AutoAttack = 0, // used for autoas and incoming DoT damage
 
         // val1 in serif font, text1 sans-serif as subtitle
         // does a bounce effect on appearance
-        DirectHit,
+        DirectHit = 1,
 
         // val1 in larger serif font with exclamation, text1 sans-serif as subtitle
         // does a bigger bounce effect on appearance
-        CriticalHit,
+        CriticalHit = 2,
 
         // val1 in even larger serif font with 2 exclamations, text1 sans-serif as subtitle
         // does a large bounce effect on appearance
         // does not scroll
-        CriticalDirectHit,
+        CriticalDirectHit = 3,
 
         // AutoAttack with sans-serif text2 to the left of the val1
-        NamedAttack,
+        NamedAttack = 4,
 
         // DirectHit with sans-serif text2 to the left of the val1
-        NamedDirectHit,
+        NamedDirectHit = 5,
 
         // CriticalHit with sans-serif text2 to the left of the val1
-        NamedCriticalHit,
+        NamedCriticalHit = 6,
 
         // CriticalDirectHit with sans-serif text2 to the left of the val1
-        NamedCriticalDirectHit,
+        NamedCriticalDirectHit = 7,
 
         // all caps serif MISS
-        Miss,
+        Miss = 8,
 
         // sans-serif text2 next to all caps serif MISS
-        NamedMiss,
+        NamedMiss = 9,
 
         // all caps serif DODGE
-        Dodge,
+        Dodge = 10,
 
         // sans-serif text2 next to all caps serif DODGE
-        NamedDodge,
+        NamedDodge = 11,
 
         // icon next to sans-serif text2
-        NamedIcon,
-        NamedIcon2,
+        NamedIcon = 12,
+        NamedIcon2 = 13,
 
         // serif val1 with all caps condensed font EXP with text1 sans-serif as subtitle
-        Exp,
+        Exp = 14,
 
         // sans-serif text2 next to serif val1 with all caps condensed font MP with text1 sans-serif as subtitle
-        NamedMP,
+        NamedMP = 15,
 
         // sans-serif text2 next to serif val1 with all caps condensed font TP with text1 sans-serif as subtitle
-        NamedTP,
+        NamedTP = 16,
 
-        NamedAttack2, // used on HoTs, heals
-        NamedMP2,
-        NamedTP2,
+        NamedAttack2 = 17, // used on HoTs, heals
+        NamedMP2 = 18,
+        NamedTP2 = 19,
 
         // sans-serif text2 next to serif val1 with all caps condensed font EP with text1 sans-serif as subtitle
-        NamedEP,
+        NamedEP = 20,
 
         // displays nothing
-        None,
+        None = 21,
 
         // all caps serif INVULNERABLE
-        Invulnerable,
+        Invulnerable = 22,
 
         // all caps sans-serif condensed font INTERRUPTED!
         // does a bounce effect on appearance
         // does not scroll
-        Interrupted,
+        Interrupted = 23,
 
         // AutoAttack with no text1
-        AutoAttackNoText,
-        AutoAttackNoText2,
-        CriticalHit2,
-        AutoAttackNoText3,
-        NamedCriticalHit2,
+        AutoAttackNoText = 24,
+        AutoAttackNoText2 = 25,
+        CriticalHit2 = 26,
+        AutoAttackNoText3 = 27,
+        NamedCriticalHit2 = 28,
 
         // same as NamedCriticalHit with a green (cannot change) MP in condensed font to the right of val1
         // does a jiggle effect to the right on appearance
-        NamedCriticalHitWithMP,
+        NamedCriticalHitWithMP = 29,
 
         // same as NamedCriticalHit with a yellow (cannot change) TP in condensed font to the right of val1
         // does a jiggle effect to the right on appearance
-        NamedCriticalHitWithTP,
+        NamedCriticalHitWithTP = 30,
 
         // same as NamedIcon with sans-serif "has no effect!" to the right
-        NamedIconHasNoEffect,
+        NamedIconHasNoEffect = 31,
 
         // same as NamedIcon but text2 is slightly faded
         // used for buff expiry
-        NamedIconFaded,
-        NamedIconFaded2,
+        NamedIconFaded = 32,
+        NamedIconFaded2 = 33,
 
         // sans-serif text2
-        Named,
+        Named = 34,
 
         // same as NamedIcon with sans-serif "(fully resisted)" to the right
-        NamedIconFullyResisted,
+        NamedIconFullyResisted = 35,
 
         // all caps serif INCAPACITATED!
-        Incapacitated,
+        Incapacitated = 36,
 
         // text2 with sans-serif "(fully resisted)" to the right
-        NamedFullyResisted,
+        NamedFullyResisted = 37,
 
         // text2 with sans-serif "has no effect!" to the right
-        NamedHasNoEffect,
+        NamedHasNoEffect = 38,
 
-        NamedAttack3,
-        NamedMP3,
-        NamedTP3,
+        NamedAttack3 = 39,
+        NamedMP3 = 40,
+        NamedTP3 = 41,
 
         // same as NamedIcon with serif "INVULNERABLE!" beneath the text2
-        NamedIconInvulnerable,
+        NamedIconInvulnerable = 42,
 
         // all caps serif RESIST
-        Resist,
+        Resist = 43,
 
         // same as NamedIcon but places the given icon in the item icon outline
-        NamedIconWithItemOutline,
+        NamedIconWithItemOutline = 44,
 
-        AutoAttackNoText4,
-        CriticalHit3,
+        AutoAttackNoText4 = 45,
+        CriticalHit3 = 46,
 
         // all caps serif REFLECT
-        Reflect,
+        Reflect = 47,
 
         // all caps serif REFLECTED
-        Reflected,
+        Reflected = 48,
 
-        DirectHit2,
-        CriticalHit5,
-        CriticalDirectHit2,
+        DirectHit2 = 49,
+        CriticalHit5 = 50,
+        CriticalDirectHit2 = 51,
     }
 
     public enum DamageType

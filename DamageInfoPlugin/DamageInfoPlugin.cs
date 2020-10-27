@@ -179,6 +179,7 @@ namespace DamageInfoPlugin
         public (IntPtr, IntPtr, IntPtr) GetTargetInfoUiElementAddresses()
         {
             IntPtr targetInfoCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfo", 1);
+            if (targetInfoCastBar == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             IntPtr targetInfoCastBarGauge = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeOffset);
             IntPtr targetInfoCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeBgOffset);
 
@@ -188,6 +189,7 @@ namespace DamageInfoPlugin
         public (IntPtr, IntPtr, IntPtr) GetTargetInfoSplitUiElementAddresses()
         {
             IntPtr targetInfoSplitCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfoCastBar", 1);
+            if (targetInfoSplitCastBar == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             IntPtr targetInfoSplitCastBarGauge = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeOffset);
             IntPtr targetInfoSplitCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeBgOffset);
 
@@ -197,16 +199,12 @@ namespace DamageInfoPlugin
         public (IntPtr, IntPtr, IntPtr) GetFocusTargetUiElementAddresses()
         {
             IntPtr focusTargetInfo = pi.Framework.Gui.GetUiObjectByName("_FocusTargetInfo", 1);
+            if (focusTargetInfo == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             IntPtr focusTargetInfoCastBarGaugeBgParentPtr = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeParentOffset);
             IntPtr focusTargetInfoCastBarGaugeBg = Marshal.ReadIntPtr(focusTargetInfoCastBarGaugeBgParentPtr, FocusTargetInfoGaugeOffsetFromParent);
             IntPtr focusTargetInfoCastBarGauge = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeShadowOffset);
 
             return (focusTargetInfo, focusTargetInfoCastBarGauge, focusTargetInfoCastBarGaugeBg);
-        }
-
-        public unsafe AtkResNodeColors GetColorsStruct(IntPtr address)
-        {
-            return *(AtkResNodeColors*) address;
         }
 
         public bool IsCharacterPet(int suspectedPet)
@@ -269,17 +267,23 @@ namespace DamageInfoPlugin
             IntPtr targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg;
             (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg) = GetTargetInfoSplitUiElementAddresses();
             
-            IntPtr gaugeColorPtr = IntPtr.Add(targetInfoCastBarGauge, AtkResNodeGaugeColorOffset);
-            IntPtr gaugeBgColorPtr = IntPtr.Add(targetInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
-            IntPtr splitGaugeColorPtr = IntPtr.Add(targetInfoSplitCastBarGauge, AtkResNodeGaugeColorOffset);
-            IntPtr splitGaugeBgColorPtr = IntPtr.Add(targetInfoSplitCastBarGaugeBg, AtkResNodeGaugeColorOffset);
-
             int white = -1;
 
-            Marshal.WriteInt32(gaugeColorPtr, white);
-            Marshal.WriteInt32(gaugeBgColorPtr, white);
-            Marshal.WriteInt32(splitGaugeColorPtr, white);
-            Marshal.WriteInt32(splitGaugeBgColorPtr, white);
+            if (targetInfoCastBar != IntPtr.Zero && targetInfoCastBarGauge != IntPtr.Zero && targetInfoCastBarGaugeBg != IntPtr.Zero)
+            {
+                IntPtr gaugeColorPtr = IntPtr.Add(targetInfoCastBarGauge, AtkResNodeGaugeColorOffset);
+                IntPtr gaugeBgColorPtr = IntPtr.Add(targetInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
+                Marshal.WriteInt32(gaugeColorPtr, white);
+                Marshal.WriteInt32(gaugeBgColorPtr, white);
+            }
+
+            if (targetInfoSplitCastBar != IntPtr.Zero && targetInfoSplitCastBarGauge != IntPtr.Zero && targetInfoSplitCastBarGaugeBg != IntPtr.Zero)
+            {
+                IntPtr splitGaugeColorPtr = IntPtr.Add(targetInfoSplitCastBarGauge, AtkResNodeGaugeColorOffset);
+                IntPtr splitGaugeBgColorPtr = IntPtr.Add(targetInfoSplitCastBarGaugeBg, AtkResNodeGaugeColorOffset);
+                Marshal.WriteInt32(splitGaugeColorPtr, white);
+                Marshal.WriteInt32(splitGaugeBgColorPtr, white);
+            }
         }
 
         public void ResetFocusTargetCastBar()
@@ -287,13 +291,15 @@ namespace DamageInfoPlugin
             IntPtr ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg;
             (ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg) = GetFocusTargetUiElementAddresses();
 
-            IntPtr gaugeColorPtr = IntPtr.Add(ftInfoCastBarGauge, AtkResNodeGaugeColorOffset);
-            IntPtr gaugeBgColorPtr = IntPtr.Add(ftInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
-
             int white = -1;
-            
-            Marshal.WriteInt32(gaugeColorPtr, white);
-            Marshal.WriteInt32(gaugeBgColorPtr, white);
+
+            if (ftInfoCastBar != IntPtr.Zero && ftInfoCastBarGauge != IntPtr.Zero && ftInfoCastBarGaugeBg != IntPtr.Zero)
+            {
+                IntPtr gaugeColorPtr = IntPtr.Add(ftInfoCastBarGauge, AtkResNodeGaugeColorOffset);
+                IntPtr gaugeBgColorPtr = IntPtr.Add(ftInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
+                Marshal.WriteInt32(gaugeColorPtr, white);
+                Marshal.WriteInt32(gaugeBgColorPtr, white);    
+            }
         }
 
         private delegate void SetCastBarDelegate(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5);
@@ -457,7 +463,7 @@ namespace DamageInfoPlugin
                     FlyTextLog($"text1: {strText1} | text2: {strText2}");
                 }
 
-                if (TryGetFlyTextDamageType(tVal1, out DamageType dmgType, out int sourceId))
+                if (TryGetFlyTextDamageType(val1, out DamageType dmgType, out int sourceId))
                 {
                     int charaId = GetCharacterActorId();
                     int petId = FindCharaPet();
@@ -820,8 +826,9 @@ namespace DamageInfoPlugin
         private int ModifyDamageALittle(int originalDamage)
         {
             var margin = (int) Math.Truncate(originalDamage * 0.1);
-            var rand = new Random(originalDamage);
+            var rand = new Random();
             var newDamage = rand.Next(originalDamage - margin, originalDamage + margin);
+            PluginLog.Log($"og dmg: {originalDamage}, new dmg: {newDamage}");
             return newDamage;
         }
     }
