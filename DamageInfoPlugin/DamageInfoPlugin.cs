@@ -4,7 +4,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text;
 using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
 using Dalamud.Hooking;
@@ -674,25 +673,25 @@ namespace DamageInfoPlugin
             }
         }
 
-        private unsafe void LogFromPtr(IntPtr ptr, int count)
-        {
-            if (ptr == IntPtr.Zero)
-            {
-                EffectLog("dump{0}: null");
-                return;
-            }
-
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < count / 512 + 1; i++)
-            {
-                var bytesLeft = count - i * 512;
-                var theseBytes = bytesLeft > 512 ? 512 : bytesLeft;
-                for (int j = 0; j < theseBytes; j++)
-                    sb.Append($"{*((byte*) ptr.ToPointer() + (i * 512) + j):X2} ");
-                EffectLog($"dump{i}: {sb}");
-                sb.Clear();
-            }
-        }
+        // private unsafe void LogFromPtr(IntPtr ptr, int count)
+        // {
+        //     if (ptr == IntPtr.Zero)
+        //     {
+        //         EffectLog("dump{0}: null");
+        //         return;
+        //     }
+        //
+        //     StringBuilder sb = new StringBuilder();
+        //     for (int i = 0; i < count / 512 + 1; i++)
+        //     {
+        //         var bytesLeft = count - i * 512;
+        //         var theseBytes = bytesLeft > 512 ? 512 : bytesLeft;
+        //         for (int j = 0; j < theseBytes; j++)
+        //             sb.Append($"{*((byte*) ptr.ToPointer() + (i * 512) + j):X2} ");
+        //         EffectLog($"dump{i}: {sb}");
+        //         sb.Clear();
+        //     }
+        // }
 
         // private unsafe void WriteNextEight(IntPtr position) {
         //  string write = "";

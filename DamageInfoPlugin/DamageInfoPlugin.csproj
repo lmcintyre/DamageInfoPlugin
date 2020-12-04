@@ -55,8 +55,8 @@
       <HintPath>..\..\Dalamud\bin\Lumina.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Lumina.Generated">
-      <HintPath>..\..\Dalamud\bin\Lumina.Generated.dll</HintPath>
+    <Reference Include="Lumina.Excel, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\..\..\AppData\Roaming\XIVLauncher\addon\Hooks\Lumina.Excel.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="SDL2-CS">
