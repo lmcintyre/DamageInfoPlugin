@@ -17,7 +17,7 @@ namespace DamageInfoPlugin
         // when a flytext 
         private const int CleanupInterval = 10000;
 
-        private const int ActorCastOffset = 6884;
+        private const int ActorCastOffset = 7012;
         private const int AtkResNodeGaugeColorOffset = 112;
         
         private const int TargetInfoGaugeOffset = 688;
@@ -181,6 +181,12 @@ namespace DamageInfoPlugin
             if (targetInfoCastBar == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             IntPtr targetInfoCastBarGauge = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeOffset);
             IntPtr targetInfoCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeBgOffset);
+            
+            // PluginLog.Log("--- Found Combined Target ptrs ---");
+            // PluginLog.Log($"bar: {targetInfoCastBar.ToInt64():X}");
+            // PluginLog.Log($"gauge: {targetInfoCastBarGauge.ToInt64():X}");
+            // PluginLog.Log($"gaugebg: {targetInfoCastBarGaugeBg.ToInt64():X}");
+            // PluginLog.Log("---  ---");
 
             return (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg);
         }
@@ -191,6 +197,12 @@ namespace DamageInfoPlugin
             if (targetInfoSplitCastBar == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             IntPtr targetInfoSplitCastBarGauge = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeOffset);
             IntPtr targetInfoSplitCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeBgOffset);
+            
+            // PluginLog.Log("--- Found Split Target ptrs ---");
+            // PluginLog.Log($"bar: {targetInfoSplitCastBar.ToInt64():X}");
+            // PluginLog.Log($"gaugebg: {targetInfoSplitCastBarGaugeBg.ToInt64():X}");
+            // PluginLog.Log($"gauge: {targetInfoSplitCastBarGauge.ToInt64():X}");
+            // PluginLog.Log("---  ---");
 
             return (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg);
         }
@@ -202,6 +214,13 @@ namespace DamageInfoPlugin
             IntPtr focusTargetInfoCastBarGaugeBgParentPtr = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeParentOffset);
             IntPtr focusTargetInfoCastBarGaugeBg = Marshal.ReadIntPtr(focusTargetInfoCastBarGaugeBgParentPtr, FocusTargetInfoGaugeOffsetFromParent);
             IntPtr focusTargetInfoCastBarGauge = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeShadowOffset);
+            
+            // PluginLog.Log("--- Found Focus Target ptrs ---");
+            // PluginLog.Log($"bar: {focusTargetInfo.ToInt64():X}");
+            // PluginLog.Log($"gaugebgparent: {focusTargetInfoCastBarGaugeBgParentPtr.ToInt64():X}");
+            // PluginLog.Log($"gaugebg: {focusTargetInfoCastBarGaugeBg.ToInt64():X}");
+            // PluginLog.Log($"gauge: {focusTargetInfoCastBarGauge.ToInt64():X}");
+            // PluginLog.Log("---  ---");
 
             return (focusTargetInfo, focusTargetInfoCastBarGauge, focusTargetInfoCastBarGaugeBg);
         }
@@ -332,7 +351,8 @@ namespace DamageInfoPlugin
                 ColorCastBar(mainTarget, targetInfoCastBarGauge, targetInfoCastBarGaugeBg, setCastBarHook,
                     thisPtr, a2, a3, a4, a5);
             }
-            else if (thisPtr == targetInfoSplitCastBar && !splitInvalid)
+            else 
+            if (thisPtr == targetInfoSplitCastBar && !splitInvalid)
             {
                 IntPtr? mainTarget = pi.ClientState?.Targets?.CurrentTarget?.Address;
                 ColorCastBar(mainTarget, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg, setCastBarHook,
