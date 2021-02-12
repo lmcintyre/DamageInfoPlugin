@@ -1,0 +1,6 @@
+﻿name: Damage Info
+internal_name: DamageInfoPlugin
+author: perchbird
+description: |-
+  Configurable UI options for damage. /dmginfo displays the UI.
+repo_url: https://github.com/lmcintyre/DamageInfoPlugin
