@@ -113,7 +113,7 @@ namespace DamageInfoPlugin
 			        IntPtr tText1 = Marshal.StringToHGlobalAnsi(text1Str);
 			        IntPtr tText2 = Marshal.StringToHGlobalAnsi(text2Str);
 		        
-			        damageInfoPlugin.hijackStruct = new HijackStruct() {
+			        damageInfoPlugin.HijackStruct = new HijackStruct() {
 				        kind = tKind,
 				        val1 = tVal1,
 				        val2 = tVal2,

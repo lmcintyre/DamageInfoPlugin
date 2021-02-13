@@ -32,7 +32,7 @@ namespace DamageInfoPlugin
         
         public string Name => "Damage Info";
 
-        private const string commandName = "/dmginfo";
+        private const string CommandName = "/dmginfo";
 
         private DalamudPluginInterface pi;
         private Configuration configuration;
@@ -40,7 +40,7 @@ namespace DamageInfoPlugin
 
         public bool Hijack { get; set; }
         public bool Randomize { get; set; }
-        public HijackStruct hijackStruct { get; set; }
+        public HijackStruct HijackStruct { get; set; }
 
         private Hook<CreateFlyTextDelegate> createFlyTextHook;
         private Hook<ReceiveActionEffectDelegate> receiveActionEffectHook;
@@ -68,7 +68,7 @@ namespace DamageInfoPlugin
             configuration.Initialize(pi, this);
             ui = new PluginUI(configuration, this);
 
-            pi.CommandManager.AddHandler(commandName, new CommandInfo(OnCommand)
+            pi.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
                 {HelpMessage = "Display the Damage Info configuration interface."});
 
             var actionSheet = pi.Data.GetExcelSheet<Action>();
@@ -126,7 +126,7 @@ namespace DamageInfoPlugin
             setFocusTargetCastBarHook.Enable();
 
             pi.UiBuilder.OnBuildUi += DrawUI;
-            pi.UiBuilder.OnOpenConfigUi += (sender, args) => DrawConfigUI();
+            pi.UiBuilder.OnOpenConfigUi += (_, _) => DrawConfigUI();
         }
 
         public void Dispose()
@@ -147,7 +147,7 @@ namespace DamageInfoPlugin
             actionToDamageTypeDict = null;
 
             ui.Dispose();
-            pi.CommandManager.RemoveHandler(commandName);
+            pi.CommandManager.RemoveHandler(CommandName);
             pi.Dispose();
         }
 
@@ -170,44 +170,32 @@ namespace DamageInfoPlugin
             ui.SettingsVisible = true;
         }
 
-        public ushort GetCurrentCast(IntPtr actor)
+        private ushort GetCurrentCast(IntPtr actor)
         {
             return (ushort) Marshal.ReadInt16(actor, ActorCastOffset);
         }
         
-        public (IntPtr, IntPtr, IntPtr) GetTargetInfoUiElementAddresses()
+        private (IntPtr, IntPtr, IntPtr) GetTargetInfoUiElementAddresses()
         {
             IntPtr targetInfoCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfo", 1);
             if (targetInfoCastBar == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             IntPtr targetInfoCastBarGauge = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeOffset);
             IntPtr targetInfoCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeBgOffset);
             
-            // PluginLog.Log("--- Found Combined Target ptrs ---");
-            // PluginLog.Log($"bar: {targetInfoCastBar.ToInt64():X}");
-            // PluginLog.Log($"gauge: {targetInfoCastBarGauge.ToInt64():X}");
-            // PluginLog.Log($"gaugebg: {targetInfoCastBarGaugeBg.ToInt64():X}");
-            // PluginLog.Log("---  ---");
-
             return (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg);
         }
 
-        public (IntPtr, IntPtr, IntPtr) GetTargetInfoSplitUiElementAddresses()
+        private (IntPtr, IntPtr, IntPtr) GetTargetInfoSplitUiElementAddresses()
         {
             IntPtr targetInfoSplitCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfoCastBar", 1);
             if (targetInfoSplitCastBar == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             IntPtr targetInfoSplitCastBarGauge = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeOffset);
             IntPtr targetInfoSplitCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeBgOffset);
             
-            // PluginLog.Log("--- Found Split Target ptrs ---");
-            // PluginLog.Log($"bar: {targetInfoSplitCastBar.ToInt64():X}");
-            // PluginLog.Log($"gaugebg: {targetInfoSplitCastBarGaugeBg.ToInt64():X}");
-            // PluginLog.Log($"gauge: {targetInfoSplitCastBarGauge.ToInt64():X}");
-            // PluginLog.Log("---  ---");
-
             return (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg);
         }
         
-        public (IntPtr, IntPtr, IntPtr) GetFocusTargetUiElementAddresses()
+        private (IntPtr, IntPtr, IntPtr) GetFocusTargetUiElementAddresses()
         {
             IntPtr focusTargetInfo = pi.Framework.Gui.GetUiObjectByName("_FocusTargetInfo", 1);
             if (focusTargetInfo == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
@@ -215,37 +203,10 @@ namespace DamageInfoPlugin
             IntPtr focusTargetInfoCastBarGaugeBg = Marshal.ReadIntPtr(focusTargetInfoCastBarGaugeBgParentPtr, FocusTargetInfoGaugeOffsetFromParent);
             IntPtr focusTargetInfoCastBarGauge = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeShadowOffset);
             
-            // PluginLog.Log("--- Found Focus Target ptrs ---");
-            // PluginLog.Log($"bar: {focusTargetInfo.ToInt64():X}");
-            // PluginLog.Log($"gaugebgparent: {focusTargetInfoCastBarGaugeBgParentPtr.ToInt64():X}");
-            // PluginLog.Log($"gaugebg: {focusTargetInfoCastBarGaugeBg.ToInt64():X}");
-            // PluginLog.Log($"gauge: {focusTargetInfoCastBarGauge.ToInt64():X}");
-            // PluginLog.Log("---  ---");
-
             return (focusTargetInfo, focusTargetInfoCastBarGauge, focusTargetInfoCastBarGaugeBg);
         }
 
-        public bool IsCharacterPet(int suspectedPet)
-        {
-            int charaId = GetCharacterActorId();
-            foreach (Actor a in pi.ClientState.Actors)
-            {
-                if (!(a is BattleNpc npc)) continue;
-
-                IntPtr actPtr = npc.Address;
-                if (actPtr == IntPtr.Zero) continue;
-
-                if (npc.ActorId != suspectedPet)
-                    continue;
-
-                if (npc.OwnerId == charaId)
-                    return true;
-            }
-
-            return false;
-        }
-
-        public int FindCharaPet()
+        private int FindCharaPet()
         {
             int charaId = GetCharacterActorId();
             foreach (Actor a in pi.ClientState.Actors)
@@ -262,14 +223,14 @@ namespace DamageInfoPlugin
             return -1;
         }
 
-        public int GetCharacterActorId()
+        private int GetCharacterActorId()
         {
             if (pi.ClientState.LocalPlayer != null)
                 return pi.ClientState.LocalPlayer.ActorId;
             return 0;
         }
 
-        public string GetActorName(int id)
+        private string GetActorName(int id)
         {
             foreach (Actor t in pi.ClientState.Actors)
                 if (t != null)
@@ -425,11 +386,11 @@ namespace DamageInfoPlugin
             hook.Original(thisPtr, a2, a3, a4, a5);
         }
         
-        public unsafe delegate IntPtr CreateFlyTextDelegate(IntPtr flyTextMgr,
+        private delegate IntPtr CreateFlyTextDelegate(IntPtr flyTextMgr,
             UInt32 kind, UInt32 val1, UInt32 val2,
             IntPtr text1, UInt32 color, UInt32 icon, IntPtr text2, float unk3);
 
-        public unsafe IntPtr CreateFlyText(
+        private IntPtr CreateFlyText(
             IntPtr flyTextMgr, // or something
             UInt32 kind,
             UInt32 val1,
@@ -454,16 +415,16 @@ namespace DamageInfoPlugin
             {
                 if (Hijack)
                 {
-                    string hjText1 = Marshal.PtrToStringAnsi(hijackStruct.text1);
-                    string hjText2 = Marshal.PtrToStringAnsi(hijackStruct.text2);
+                    string hjText1 = Marshal.PtrToStringAnsi(HijackStruct.text1);
+                    string hjText2 = Marshal.PtrToStringAnsi(HijackStruct.text2);
 
                     FlyTextLog(
-                        $"flytext hijacked: kind: {hijackStruct.kind}, val1: {hijackStruct.val1}, val2: {hijackStruct.val2}, color: {hijackStruct.color:X}, icon: {hijackStruct.icon}");
+                        $"flytext hijacked: kind: {HijackStruct.kind}, val1: {HijackStruct.val1}, val2: {HijackStruct.val2}, color: {HijackStruct.color:X}, icon: {HijackStruct.icon}");
                     FlyTextLog($"text1: {hjText1} | text2: {hjText2}");
 
-                    return createFlyTextHook.Original(flyTextMgr, hijackStruct.kind, hijackStruct.val1,
-                        hijackStruct.val2, hijackStruct.text1, hijackStruct.color, hijackStruct.icon,
-                        hijackStruct.text2, unk3);
+                    return createFlyTextHook.Original(flyTextMgr, HijackStruct.kind, HijackStruct.val1,
+                        HijackStruct.val2, HijackStruct.text1, HijackStruct.color, HijackStruct.icon,
+                        HijackStruct.text2, unk3);
                 }
 
                 FlyTextKind ftKind = (FlyTextKind) kind;
@@ -557,10 +518,10 @@ namespace DamageInfoPlugin
             return createFlyTextHook.Original(flyTextMgr, kind, tVal1, val2, text1, tColor, icon, text2, unk3);
         }
 
-        public delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr sourceCharacter, IntPtr pos,
+        private delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr sourceCharacter, IntPtr pos,
             IntPtr effectHeader, IntPtr effectArray, IntPtr effectTrail);
 
-        public unsafe void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr pos,
+        private unsafe void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr pos,
             IntPtr effectHeader,
             IntPtr effectArray, IntPtr effectTrail)
         {
@@ -692,37 +653,6 @@ namespace DamageInfoPlugin
                 PluginLog.Log($"{e.Message} {e.StackTrace}");
             }
         }
-
-        // private unsafe void LogFromPtr(IntPtr ptr, int count)
-        // {
-        //     if (ptr == IntPtr.Zero)
-        //     {
-        //         EffectLog("dump{0}: null");
-        //         return;
-        //     }
-        //
-        //     StringBuilder sb = new StringBuilder();
-        //     for (int i = 0; i < count / 512 + 1; i++)
-        //     {
-        //         var bytesLeft = count - i * 512;
-        //         var theseBytes = bytesLeft > 512 ? 512 : bytesLeft;
-        //         for (int j = 0; j < theseBytes; j++)
-        //             sb.Append($"{*((byte*) ptr.ToPointer() + (i * 512) + j):X2} ");
-        //         EffectLog($"dump{i}: {sb}");
-        //         sb.Clear();
-        //     }
-        // }
-
-        // private unsafe void WriteNextEight(IntPtr position) {
-        //  string write = "";
-        //  for (int i = 0; i < 8; i++)
-        //   write += $"{*((byte*)position + i):X2} ";
-        //  EffectLog(write);
-        // }
-
-        //      private void CreateMessageLog(string str) {
-        // PluginLog.Log($"[createmessage] {str}");
-        //      }
 
         private void EffectLog(string str)
         {
