@@ -12,7 +12,6 @@ The purpose of this plugin is to provide extra information in channels untapped 
 Plugin has been verified as stable. However, **if you do not want to risk crashing mid-combat, do not enable this plugin during combat.** Despite playing the game quite a bit with this enabled, there's always a possibility of weird behavior.
 
 ## Known issues
-- The plugin does not work in TEA. Support is planned eventually.
 - Misses, dodges, and incoming damage of 0 (due to shields or otherwise) are not supported.
 - With source text enabled, a lot of strings are allocated. They are freed, but the long-term effects of this are unknown at the moment.
 - From experience the plugin in its current state is quite reliable with damage type, however, it is for a general idea of damage type, rather than a 100% guarantee due to the way damage/flytext is linked.
