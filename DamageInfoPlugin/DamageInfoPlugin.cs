@@ -4,6 +4,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
+using Dalamud;
 using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
 using Dalamud.Hooking;
@@ -494,18 +496,9 @@ namespace DamageInfoPlugin
 
                         if (tgtCheck || petCheck)
                         {
-                            string name = GetActorName(sourceId);
-
-                            if (!string.IsNullOrEmpty(name))
-                            {
-                                string existingText = "";
-                                if (text1 != IntPtr.Zero)
-                                    existingText = Marshal.PtrToStringAnsi(text1);
-
-                                string combined = $"from {name} {existingText}";
-                                text1 = Marshal.StringToHGlobalAnsi(combined);
+                            text1 = GetNewTextPtr(sourceId, text1);
+                            if (text1 != IntPtr.Zero)
                                 text.Enqueue(new Tuple<IntPtr, long>(text1, Ms()));
-                            }
                         }
                     }
                 }
@@ -516,6 +509,45 @@ namespace DamageInfoPlugin
             }
 
             return createFlyTextHook.Original(flyTextMgr, kind, tVal1, val2, text1, tColor, icon, text2, unk3);
+        }
+
+        private IntPtr GetNewTextPtr(int sourceId, IntPtr originalText)
+        {
+            IntPtr ret = IntPtr.Zero;
+            string name = GetActorName(sourceId);
+
+            if (string.IsNullOrEmpty(name)) return ret;
+
+            var newText = new List<byte>();
+            
+            switch (pi.ClientState.ClientLanguage)
+            {
+                case ClientLanguage.Japanese:
+                    newText.AddRange(Encoding.Default.GetBytes(name));
+                    newText.AddRange(Encoding.UTF8.GetBytes("から"));
+                    break;
+                case ClientLanguage.English:
+                    newText.AddRange(Encoding.Default.GetBytes($"from {name}"));
+                    break;
+                case ClientLanguage.German:
+                    newText.AddRange(Encoding.Default.GetBytes($"von {name}"));
+                    break;
+                case ClientLanguage.French:
+                    newText.AddRange(Encoding.Default.GetBytes($"de {name}"));
+                    break;
+                default:
+                    newText.AddRange(Encoding.Default.GetBytes($">{name}"));
+                    break;
+            }
+            
+            if (originalText != IntPtr.Zero)
+                newText.AddRange(Encoding.Default.GetBytes($" {Marshal.PtrToStringAnsi(originalText)}"));
+
+            newText.Add(0);
+            ret = Marshal.AllocHGlobal(newText.Count);
+            Marshal.Copy(newText.ToArray(), 0, ret, newText.Count);
+
+            return ret;
         }
 
         private delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr sourceCharacter, IntPtr pos,
