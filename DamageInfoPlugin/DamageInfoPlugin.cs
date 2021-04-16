@@ -3,35 +3,34 @@ using Dalamud.Plugin;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud;
-using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
+using Dalamud.Game.ClientState.Structs;
 using Dalamud.Hooking;
+using FFXIVClientStructs.Component.GUI;
 using ImGuiNET;
 using Action = Lumina.Excel.GeneratedSheets.Action;
+using Actor = Dalamud.Game.ClientState.Actors.Types.Actor;
 
 namespace DamageInfoPlugin
 {
-    public class DamageInfoPlugin : IDalamudPlugin
+    public unsafe class DamageInfoPlugin : IDalamudPlugin
     {
         // when a flytext 
         private const int CleanupInterval = 10000;
 
-        private const int ActorCastOffset = 7012;
-        private const int AtkResNodeGaugeColorOffset = 112;
+        private const int TargetInfoGaugeBgNodeIndex = 41;
+        private const int TargetInfoGaugeNodeIndex = 43;
+
+        private const int TargetInfoSplitGaugeBgNodeIndex = 2;
+        private const int TargetInfoSplitGaugeNodeIndex = 4;
         
-        private const int TargetInfoGaugeOffset = 688;
-        private const int TargetInfoGaugeBgOffset = 696;
-        
-        private const int TargetInfoSplitGaugeOffset = 568;
-        private const int TargetInfoSplitGaugeBgOffset = 576;
-        
-        private const int FocusTargetInfoGaugeParentOffset = 568;
-        private const int FocusTargetInfoGaugeOffsetFromParent = 56;
-        private const int FocusTargetInfoGaugeShadowOffset = 584;
-        
+        private const int FocusTargetInfoGaugeBgNodeIndex = 13;
+        private const int FocusTargetInfoGaugeNodeIndex = 15;
+
         public string Name => "Damage Info";
 
         private const string CommandName = "/dmginfo";
@@ -55,6 +54,7 @@ namespace DamageInfoPlugin
         private ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>> futureFlyText;
         private ConcurrentQueue<Tuple<IntPtr, long>> text;
         private long lastCleanup;
+        private IntPtr blankText;
 
         public void Initialize(DalamudPluginInterface pluginInterface)
         {
@@ -118,9 +118,13 @@ namespace DamageInfoPlugin
                 setCastBarHook?.Dispose();
                 setFocusTargetCastBarHook?.Disable();
                 setFocusTargetCastBarHook?.Dispose();
+                Marshal.FreeHGlobal(blankText);
 
                 throw;
             }
+
+            blankText = Marshal.AllocHGlobal(1);
+            Marshal.WriteByte(blankText, 0);
 
             createFlyTextHook.Enable();
             receiveActionEffectHook.Enable();
@@ -174,40 +178,42 @@ namespace DamageInfoPlugin
 
         private ushort GetCurrentCast(IntPtr actor)
         {
-            return (ushort) Marshal.ReadInt16(actor, ActorCastOffset);
+            return (ushort) Marshal.ReadInt16(actor, ActorOffsets.CurrentCastSpellActionId);
         }
         
-        private (IntPtr, IntPtr, IntPtr) GetTargetInfoUiElementAddresses()
+        private CastbarInfo GetTargetInfoUiElements()
         {
-            IntPtr targetInfoCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfo", 1);
-            if (targetInfoCastBar == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-            IntPtr targetInfoCastBarGauge = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeOffset);
-            IntPtr targetInfoCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoCastBar, TargetInfoGaugeBgOffset);
-            
-            return (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg);
+            AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_TargetInfo", 1).ToPointer();
+            return new CastbarInfo
+            {
+                unitBase = unitbase,
+                gauge = (AtkImageNode*) unitbase->ULDData.NodeList[TargetInfoGaugeNodeIndex],
+                bg = (AtkImageNode*) unitbase->ULDData.NodeList[TargetInfoGaugeBgNodeIndex]
+            };
         }
 
-        private (IntPtr, IntPtr, IntPtr) GetTargetInfoSplitUiElementAddresses()
+        private CastbarInfo GetTargetInfoSplitUiElements()
         {
-            IntPtr targetInfoSplitCastBar = pi.Framework.Gui.GetUiObjectByName("_TargetInfoCastBar", 1);
-            if (targetInfoSplitCastBar == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-            IntPtr targetInfoSplitCastBarGauge = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeOffset);
-            IntPtr targetInfoSplitCastBarGaugeBg = Marshal.ReadIntPtr(targetInfoSplitCastBar, TargetInfoSplitGaugeBgOffset);
-            
-            return (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg);
+            AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_TargetInfoCastBar", 1).ToPointer();
+            return new CastbarInfo
+            {
+                unitBase = unitbase,
+                gauge = (AtkImageNode*) unitbase->ULDData.NodeList[TargetInfoSplitGaugeNodeIndex],
+                bg = (AtkImageNode*) unitbase->ULDData.NodeList[TargetInfoSplitGaugeBgNodeIndex]
+            };
         }
         
-        private (IntPtr, IntPtr, IntPtr) GetFocusTargetUiElementAddresses()
+        private CastbarInfo GetFocusTargetUiElements()
         {
-            IntPtr focusTargetInfo = pi.Framework.Gui.GetUiObjectByName("_FocusTargetInfo", 1);
-            if (focusTargetInfo == IntPtr.Zero) return (IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-            IntPtr focusTargetInfoCastBarGaugeBgParentPtr = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeParentOffset);
-            IntPtr focusTargetInfoCastBarGaugeBg = Marshal.ReadIntPtr(focusTargetInfoCastBarGaugeBgParentPtr, FocusTargetInfoGaugeOffsetFromParent);
-            IntPtr focusTargetInfoCastBarGauge = Marshal.ReadIntPtr(focusTargetInfo, FocusTargetInfoGaugeShadowOffset);
-            
-            return (focusTargetInfo, focusTargetInfoCastBarGauge, focusTargetInfoCastBarGaugeBg);
+            AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_FocusTargetInfo", 1).ToPointer();
+            return new CastbarInfo
+            {
+                unitBase = unitbase,
+                gauge = (AtkImageNode*) unitbase->ULDData.NodeList[FocusTargetInfoGaugeNodeIndex],
+                bg = (AtkImageNode*) unitbase->ULDData.NodeList[FocusTargetInfoGaugeBgNodeIndex]
+            };
         }
-
+        
         private int FindCharaPet()
         {
             int charaId = GetCharacterActorId();
@@ -243,43 +249,51 @@ namespace DamageInfoPlugin
 
         public void ResetMainTargetCastBar()
         {
-            IntPtr targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg;
-            (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg) = GetTargetInfoUiElementAddresses();
-            IntPtr targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg;
-            (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg) = GetTargetInfoSplitUiElementAddresses();
-            
-            int white = -1;
+            var targetInfo = GetTargetInfoUiElements();
+            var splitInfo = GetTargetInfoSplitUiElements();
 
-            if (targetInfoCastBar != IntPtr.Zero && targetInfoCastBarGauge != IntPtr.Zero && targetInfoCastBarGaugeBg != IntPtr.Zero)
+            if (targetInfo.unitBase != null && targetInfo.gauge != null && targetInfo.bg != null)
             {
-                IntPtr gaugeColorPtr = IntPtr.Add(targetInfoCastBarGauge, AtkResNodeGaugeColorOffset);
-                IntPtr gaugeBgColorPtr = IntPtr.Add(targetInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
-                Marshal.WriteInt32(gaugeColorPtr, white);
-                Marshal.WriteInt32(gaugeBgColorPtr, white);
+                targetInfo.gauge->AtkResNode.Color.R = 0xFF;
+                targetInfo.gauge->AtkResNode.Color.G = 0xFF;
+                targetInfo.gauge->AtkResNode.Color.B = 0xFF;
+                targetInfo.gauge->AtkResNode.Color.A = 0xFF;
+                
+                targetInfo.bg->AtkResNode.Color.R = 0xFF;
+                targetInfo.bg->AtkResNode.Color.G = 0xFF;
+                targetInfo.bg->AtkResNode.Color.B = 0xFF;
+                targetInfo.bg->AtkResNode.Color.A = 0xFF;
             }
 
-            if (targetInfoSplitCastBar != IntPtr.Zero && targetInfoSplitCastBarGauge != IntPtr.Zero && targetInfoSplitCastBarGaugeBg != IntPtr.Zero)
+            if (splitInfo.unitBase != null && splitInfo.gauge != null && splitInfo.bg != null)
             {
-                IntPtr splitGaugeColorPtr = IntPtr.Add(targetInfoSplitCastBarGauge, AtkResNodeGaugeColorOffset);
-                IntPtr splitGaugeBgColorPtr = IntPtr.Add(targetInfoSplitCastBarGaugeBg, AtkResNodeGaugeColorOffset);
-                Marshal.WriteInt32(splitGaugeColorPtr, white);
-                Marshal.WriteInt32(splitGaugeBgColorPtr, white);
+                splitInfo.gauge->AtkResNode.Color.R = 0xFF;
+                splitInfo.gauge->AtkResNode.Color.G = 0xFF;
+                splitInfo.gauge->AtkResNode.Color.B = 0xFF;
+                splitInfo.gauge->AtkResNode.Color.A = 0xFF;
+                
+                splitInfo.bg->AtkResNode.Color.R = 0xFF;
+                splitInfo.bg->AtkResNode.Color.G = 0xFF;
+                splitInfo.bg->AtkResNode.Color.B = 0xFF;
+                splitInfo.bg->AtkResNode.Color.A = 0xFF;
             }
         }
 
         public void ResetFocusTargetCastBar()
         {
-            IntPtr ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg;
-            (ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg) = GetFocusTargetUiElementAddresses();
+            var ftInfo = GetFocusTargetUiElements();
 
-            int white = -1;
-
-            if (ftInfoCastBar != IntPtr.Zero && ftInfoCastBarGauge != IntPtr.Zero && ftInfoCastBarGaugeBg != IntPtr.Zero)
+            if (ftInfo.unitBase != null && ftInfo.gauge != null && ftInfo.bg != null)
             {
-                IntPtr gaugeColorPtr = IntPtr.Add(ftInfoCastBarGauge, AtkResNodeGaugeColorOffset);
-                IntPtr gaugeBgColorPtr = IntPtr.Add(ftInfoCastBarGaugeBg, AtkResNodeGaugeColorOffset);
-                Marshal.WriteInt32(gaugeColorPtr, white);
-                Marshal.WriteInt32(gaugeBgColorPtr, white);    
+                ftInfo.gauge->AtkResNode.Color.R = 0xFF;
+                ftInfo.gauge->AtkResNode.Color.G = 0xFF;
+                ftInfo.gauge->AtkResNode.Color.B = 0xFF;
+                ftInfo.gauge->AtkResNode.Color.A = 0xFF;
+                
+                ftInfo.bg->AtkResNode.Color.R = 0xFF;
+                ftInfo.bg->AtkResNode.Color.G = 0xFF;
+                ftInfo.bg->AtkResNode.Color.B = 0xFF;
+                ftInfo.bg->AtkResNode.Color.A = 0xFF;
             }
         }
 
@@ -292,15 +306,12 @@ namespace DamageInfoPlugin
                 setCastBarHook.Original(thisPtr, a2, a3, a4, a5);
                 return;
             }
-            
-            IntPtr targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg;
-            (targetInfoCastBar, targetInfoCastBarGauge, targetInfoCastBarGaugeBg) = GetTargetInfoUiElementAddresses();
-            
-            IntPtr targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg;
-            (targetInfoSplitCastBar, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg) = GetTargetInfoSplitUiElementAddresses();
 
-            bool combinedInvalid = targetInfoCastBar == IntPtr.Zero || targetInfoCastBarGauge == IntPtr.Zero || targetInfoCastBarGaugeBg == IntPtr.Zero;
-            bool splitInvalid = targetInfoSplitCastBar == IntPtr.Zero || targetInfoSplitCastBarGauge == IntPtr.Zero || targetInfoSplitCastBarGaugeBg == IntPtr.Zero;
+            var targetInfo = GetTargetInfoUiElements();
+            var splitInfo = GetTargetInfoSplitUiElements();
+
+            bool combinedInvalid = targetInfo.unitBase == null || targetInfo.gauge == null || targetInfo.bg == null;
+            bool splitInvalid = splitInfo.unitBase == null || splitInfo.gauge == null || splitInfo.bg == null;
             
             if (combinedInvalid && splitInvalid)
             {
@@ -308,17 +319,17 @@ namespace DamageInfoPlugin
                 return;
             }
 
-            if (thisPtr == targetInfoCastBar && !combinedInvalid)
+            if (thisPtr.ToPointer() == targetInfo.unitBase && !combinedInvalid)
             {
                 IntPtr? mainTarget = pi.ClientState?.Targets?.CurrentTarget?.Address;
-                ColorCastBar(mainTarget, targetInfoCastBarGauge, targetInfoCastBarGaugeBg, setCastBarHook,
+                ColorCastBar(mainTarget, targetInfo, setCastBarHook,
                     thisPtr, a2, a3, a4, a5);
             }
             else 
-            if (thisPtr == targetInfoSplitCastBar && !splitInvalid)
+            if (thisPtr.ToPointer() == splitInfo.unitBase && !splitInvalid)
             {
                 IntPtr? mainTarget = pi.ClientState?.Targets?.CurrentTarget?.Address;
-                ColorCastBar(mainTarget, targetInfoSplitCastBarGauge, targetInfoSplitCastBarGaugeBg, setCastBarHook,
+                ColorCastBar(mainTarget, splitInfo, setCastBarHook,
                     thisPtr, a2, a3, a4, a5);
             }
         }
@@ -331,20 +342,19 @@ namespace DamageInfoPlugin
                 return;
             }
             
-            IntPtr ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg;
-            (ftInfoCastBar, ftInfoCastBarGauge, ftInfoCastBarGaugeBg) = GetFocusTargetUiElementAddresses();
+            var ftInfo = GetFocusTargetUiElements();
             
-            bool focusTargetInvalid = ftInfoCastBar == IntPtr.Zero || ftInfoCastBarGauge == IntPtr.Zero || ftInfoCastBarGaugeBg == IntPtr.Zero; 
+            bool focusTargetInvalid = ftInfo.unitBase == null || ftInfo.gauge == null || ftInfo.bg == null; 
             
-            if (thisPtr == ftInfoCastBar && !focusTargetInvalid)
+            if (thisPtr.ToPointer() == ftInfo.unitBase && !focusTargetInvalid)
             {
                 IntPtr? focusTarget = pi.ClientState?.Targets?.FocusTarget?.Address;
-                ColorCastBar(focusTarget, ftInfoCastBarGauge, ftInfoCastBarGaugeBg, setFocusTargetCastBarHook,
+                ColorCastBar(focusTarget, ftInfo, setFocusTargetCastBarHook,
                                 thisPtr, a2, a3, a4, a5);
             }
         }
         
-        private void ColorCastBar(IntPtr? target, IntPtr gauge, IntPtr bg, Hook<SetCastBarDelegate> hook,
+        private void ColorCastBar(IntPtr? target, CastbarInfo info, Hook<SetCastBarDelegate> hook,
             IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
         {
             if (!target.HasValue || target.Value == IntPtr.Zero)
@@ -354,37 +364,50 @@ namespace DamageInfoPlugin
             }
             
             ushort actionId = GetCurrentCast(target.Value);
-                    
-            IntPtr gaugeColorPtr = IntPtr.Add(gauge, AtkResNodeGaugeColorOffset);
-            IntPtr gaugeBgColorPtr = IntPtr.Add(bg, AtkResNodeGaugeColorOffset);
-
+            
             actionToDamageTypeDict.TryGetValue(actionId, out DamageType type);
             if (ignoredCastActions.Contains(actionId))
             {
-                Marshal.WriteInt32(gaugeColorPtr, -1);
-                Marshal.WriteInt32(gaugeBgColorPtr, -1);
+                info.gauge->AtkResNode.Color.R = 0xFF;
+                info.gauge->AtkResNode.Color.G = 0xFF;
+                info.gauge->AtkResNode.Color.B = 0xFF;
+                info.gauge->AtkResNode.Color.A = 0xFF;
+
+                info.bg->AtkResNode.Color.R = 0xFF;
+                info.bg->AtkResNode.Color.G = 0xFF;
+                info.bg->AtkResNode.Color.B = 0xFF;
+                info.bg->AtkResNode.Color.A = 0xFF;
+                
                 hook.Original(thisPtr, a2, a3, a4, a5);
                 return;
             }
-                    
-            uint newCastColor = type switch
+            
+            var castColor = type switch
             {
-                DamageType.Physical => ImGui.GetColorU32(configuration.PhysicalCastColor),
-                DamageType.Magic => ImGui.GetColorU32(configuration.MagicCastColor),
-                DamageType.Darkness => ImGui.GetColorU32(configuration.DarknessCastColor),
-                _ => uint.MaxValue
+                DamageType.Physical => configuration.PhysicalCastColor,
+                DamageType.Magic => configuration.MagicCastColor,
+                DamageType.Darkness => configuration.DarknessCastColor,
+                _ => Vector4.One
             };
                     
-            uint newBgColor = type switch
+            var bgColor = type switch
             {
-                DamageType.Physical => ImGui.GetColorU32(configuration.PhysicalBgColor),
-                DamageType.Magic => ImGui.GetColorU32(configuration.MagicBgColor),
-                DamageType.Darkness => ImGui.GetColorU32(configuration.DarknessBgColor),
-                _ => uint.MaxValue
+                DamageType.Physical => configuration.PhysicalBgColor,
+                DamageType.Magic => configuration.MagicBgColor,
+                DamageType.Darkness => configuration.DarknessBgColor,
+                _ => Vector4.One
             };
-                    
-            Marshal.WriteInt32(gaugeColorPtr, (int) newCastColor);
-            Marshal.WriteInt32(gaugeBgColorPtr, (int) newBgColor);
+            
+            info.gauge->AtkResNode.Color.R = (byte) (castColor.X * 255);
+            info.gauge->AtkResNode.Color.G = (byte) (castColor.Y * 255);
+            info.gauge->AtkResNode.Color.B = (byte) (castColor.Z * 255);
+            info.gauge->AtkResNode.Color.A = (byte) (castColor.W * 255);
+
+            info.bg->AtkResNode.Color.R = (byte) (bgColor.X * 255);
+            info.bg->AtkResNode.Color.G = (byte) (bgColor.Y * 255);
+            info.bg->AtkResNode.Color.B = (byte) (bgColor.Z * 255);
+            info.bg->AtkResNode.Color.A = (byte) (bgColor.W * 255);
+            
             hook.Original(thisPtr, a2, a3, a4, a5);
         }
         
@@ -406,6 +429,7 @@ namespace DamageInfoPlugin
         {
             uint tColor = color;
             uint tVal1 = val1;
+            IntPtr tText2 = text2;
 
             if (Randomize)
             {
@@ -501,6 +525,12 @@ namespace DamageInfoPlugin
                                 text.Enqueue(new Tuple<IntPtr, long>(text1, Ms()));
                         }
                     }
+
+                    // Attack text checks
+                    if ((sourceId != charaId && sourceId != petId && !configuration.IncomingAttackTextEnabled) ||
+                        (sourceId == charaId && !configuration.OutgoingAttackTextEnabled) ||
+                        (sourceId == petId && !configuration.PetAttackTextEnabled))
+                        tText2 = blankText;
                 }
             }
             catch (Exception e)
@@ -508,7 +538,7 @@ namespace DamageInfoPlugin
                 PluginLog.Log($"{e.Message} {e.StackTrace}");
             }
 
-            return createFlyTextHook.Original(flyTextMgr, kind, tVal1, val2, text1, tColor, icon, text2, unk3);
+            return createFlyTextHook.Original(flyTextMgr, kind, tVal1, val2, text1, tColor, icon, tText2, unk3);
         }
 
         private IntPtr GetNewTextPtr(int sourceId, IntPtr originalText)
@@ -553,7 +583,7 @@ namespace DamageInfoPlugin
         private delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr sourceCharacter, IntPtr pos,
             IntPtr effectHeader, IntPtr effectArray, IntPtr effectTrail);
 
-        private unsafe void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr pos,
+        private void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr pos,
             IntPtr effectHeader,
             IntPtr effectArray, IntPtr effectTrail)
         {

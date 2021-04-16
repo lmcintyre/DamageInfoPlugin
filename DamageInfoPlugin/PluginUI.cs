@@ -153,6 +153,9 @@ namespace DamageInfoPlugin
 	            var petColorConfigValue = configuration.PetDamageColorEnabled;
 	            var sourceTextConfigValue = configuration.SourceTextEnabled;
 	            var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
+	            var incAttackTextConfigValue = configuration.IncomingAttackTextEnabled;
+	            var outAttackTextConfigValue = configuration.OutgoingAttackTextEnabled;
+	            var petAttackTextConfigValue = configuration.PetAttackTextEnabled;
 
 	            if (ImGui.CollapsingHeader("Damage type information"))
 	            {
@@ -172,11 +175,13 @@ namespace DamageInfoPlugin
 
 	            if (ImGui.CollapsingHeader("Flytext"))
 	            {
-		            ImGui.Columns(3, "FT Options", false);
+		            ImGui.Columns(4, "FT Options", false);
 		            ImGui.NextColumn();
 		            ImGui.Text("Color");
 		            ImGui.NextColumn();
 		            ImGui.Text("Source Text");
+		            ImGui.NextColumn();
+		            ImGui.Text("Attack Text");
 		            ImGui.NextColumn();
 		            ImGui.Text("Incoming Damage");
 		            ImGui.NextColumn();
@@ -192,6 +197,12 @@ namespace DamageInfoPlugin
 			            configuration.Save();
 		            }
 		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##incomingattack", ref incAttackTextConfigValue))
+		            {
+			            configuration.IncomingAttackTextEnabled = incAttackTextConfigValue;
+			            configuration.Save();
+		            }
+		            ImGui.NextColumn();
 		            ImGui.Text("Outgoing Damage");
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##outgoingcolor", ref colorOutTextConfigValue))
@@ -200,6 +211,12 @@ namespace DamageInfoPlugin
 			            configuration.Save();
 		            }
 		            ImGui.NextColumn();
+		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##outgoingattack", ref outAttackTextConfigValue))
+		            {
+			            configuration.OutgoingAttackTextEnabled = outAttackTextConfigValue;
+			            configuration.Save();
+		            }
 		            ImGui.NextColumn();
 		            ImGui.Text("Pet");
 		            ImGui.NextColumn();
@@ -214,6 +231,13 @@ namespace DamageInfoPlugin
 			            configuration.PetSourceTextEnabled = petSourceTextConfigValue;
 			            configuration.Save();
 		            }
+		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##petattack", ref petAttackTextConfigValue))
+		            {
+			            configuration.PetAttackTextEnabled = petAttackTextConfigValue;
+			            configuration.Save();
+		            }
+		            ImGui.NextColumn();
 		            ImGui.Columns(1, "FT Options");
 		            ImGui.Separator();
 		            

@@ -32,7 +32,10 @@ namespace DamageInfoPlugin
         private bool _petSourceTextEnabled = false;
         private bool _mainTargetCastBarColorEnabled = false;
         private bool _focusTargetCastBarColorEnabled = false;
-
+        private bool _incomingAttackTextEnabled = true;
+        private bool _outgoingAttackTextEnabled = true;
+        private bool _petAttackTextEnabled = true;
+        
         public bool IncomingColorEnabled {
 	        get => _incomingColorEnabled;
 	        set {
@@ -106,6 +109,24 @@ namespace DamageInfoPlugin
 		        dmgPlugin?.ResetFocusTargetCastBar();
 		        _focusTargetCastBarColorEnabled = value;
 	        }
+        }
+        
+        public bool IncomingAttackTextEnabled
+        {
+	        get => _incomingAttackTextEnabled;
+	        set => _incomingAttackTextEnabled = value;
+        }
+
+        public bool OutgoingAttackTextEnabled
+        {
+	        get => _outgoingAttackTextEnabled;
+	        set => _outgoingAttackTextEnabled = value;
+        }
+
+        public bool PetAttackTextEnabled
+        {
+	        get => _petAttackTextEnabled;
+	        set => _petAttackTextEnabled = value;
         }
         
         [NonSerialized]

@@ -1,7 +1,15 @@
 ﻿using System;
+using FFXIVClientStructs.Component.GUI;
 
 namespace DamageInfoPlugin
 {
+    public unsafe struct CastbarInfo
+    {
+        public AtkUnitBase* unitBase;
+        public AtkImageNode* gauge;
+        public AtkImageNode* bg;
+    }
+    
     public struct HijackStruct
     {
         public uint kind;
