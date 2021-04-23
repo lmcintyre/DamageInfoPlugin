@@ -49,6 +49,7 @@ namespace DamageInfoPlugin
         private Hook<SetCastBarDelegate> setCastBarHook;
         private Hook<SetCastBarDelegate> setFocusTargetCastBarHook;
 
+        private CastbarInfo _nullCastbarInfo;
         private Dictionary<uint, DamageType> actionToDamageTypeDict;
         private HashSet<uint> ignoredCastActions;
         private ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>> futureFlyText;
@@ -73,6 +74,8 @@ namespace DamageInfoPlugin
             pi.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
                 {HelpMessage = "Display the Damage Info configuration interface."});
 
+            _nullCastbarInfo = new CastbarInfo {unitBase = null, gauge = null, bg = null};
+            
             var actionSheet = pi.Data.GetExcelSheet<Action>();
             foreach (var row in actionSheet)
             {
@@ -184,6 +187,9 @@ namespace DamageInfoPlugin
         private CastbarInfo GetTargetInfoUiElements()
         {
             AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_TargetInfo", 1).ToPointer();
+
+            if (unitbase == null) return _nullCastbarInfo;
+            
             return new CastbarInfo
             {
                 unitBase = unitbase,
@@ -195,6 +201,9 @@ namespace DamageInfoPlugin
         private CastbarInfo GetTargetInfoSplitUiElements()
         {
             AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_TargetInfoCastBar", 1).ToPointer();
+            
+            if (unitbase == null) return _nullCastbarInfo;
+            
             return new CastbarInfo
             {
                 unitBase = unitbase,
@@ -206,6 +215,9 @@ namespace DamageInfoPlugin
         private CastbarInfo GetFocusTargetUiElements()
         {
             AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_FocusTargetInfo", 1).ToPointer();
+            
+            if (unitbase == null) return _nullCastbarInfo;
+            
             return new CastbarInfo
             {
                 unitBase = unitbase,
