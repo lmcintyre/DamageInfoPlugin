@@ -1,0 +1,41 @@
+name: Create PR
+
+on:
+  workflow_dispatch: 
+
+env:
+  PERSONAL_PLUGIN_REPO: lmcintyre/DalamudPlugins
+  INTERNAL_NAME: DamageInfoPlugin
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DalamudPlugins
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.PERSONAL_PLUGIN_REPO }}
+          ref: ${{ env.INTERNAL_NAME }}
+          token: ${{ secrets.PAT }}
+#      - name: Set branch
+#        run: git -b ${{ env.INTERNAL_NAME }}
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: artifact
+          path: /tmp/
+      - name: Get release
+        id: getrel
+        uses: pozetroninc/github-action-get-latest-release@master
+        with:
+          repository: ${{ github.repository }}
+      - name: Expand artifact
+        run: unzip /tmp/artifact -d plugins/${{ env.INTERNAL_NAME }}
+      - name: Commit
+        uses: EndBug/add-and-commit@v7
+        with:
+          add: --all
+          author_name: GitHub Action
+          author_email: github-actions[bot]@users.noreply.github.com
+          branch: ${{ env.INTERNAL_NAME }}
+          message: ${{ env.INTERNAL_NAME }} -> steps.getrel.outputs.release
