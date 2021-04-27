@@ -10,7 +10,7 @@ using Dalamud;
 using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
 using Dalamud.Game.ClientState.Structs;
 using Dalamud.Hooking;
-using FFXIVClientStructs.Component.GUI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 using Actor = Dalamud.Game.ClientState.Actors.Types.Actor;
