@@ -1,4 +1,5 @@
 [![Download count](https://img.shields.io/endpoint?url=https%3A%2F%2Fvz32sgcoal.execute-api.us-east-1.amazonaws.com%2FDamageInfoPlugin)](https://github.com/lmcintyre/DamageInfoPlugin)
+[![Build status](https://github.com/lmcintyre/DamageInfoPlugin/actions/workflows/build.yml/badge.svg)](https://github.com/lmcintyre/DamageInfoPlugin)
 
 # DamageInfoPlugin
  Dalamud plugin for extra damage info in the native XIV flytext.
