@@ -67,7 +67,6 @@ namespace DamageInfoPlugin
 	        get => _sourceTextEnabled;
 	        set {
 		        if (!value) {
-			        dmgPlugin?.ClearTextPtrs();
 				    _petSourceTextEnabled = false;
                 }
 		        _sourceTextEnabled = value;

@@ -3,12 +3,15 @@ using Dalamud.Plugin;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Text;
 using Dalamud;
 using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
 using Dalamud.Game.ClientState.Structs;
+using Dalamud.Game.Internal.Gui;
+using Dalamud.Game.Text.SeStringHandling;
+using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
@@ -39,11 +42,8 @@ namespace DamageInfoPlugin
         private Configuration configuration;
         private PluginUI ui;
 
-        public bool Hijack { get; set; }
         public bool Randomize { get; set; }
-        public HijackStruct HijackStruct { get; set; }
 
-        private Hook<CreateFlyTextDelegate> createFlyTextHook;
         private Hook<ReceiveActionEffectDelegate> receiveActionEffectHook;
         
         private Hook<SetCastBarDelegate> setCastBarHook;
@@ -53,16 +53,13 @@ namespace DamageInfoPlugin
         private Dictionary<uint, DamageType> actionToDamageTypeDict;
         private HashSet<uint> ignoredCastActions;
         private ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>> futureFlyText;
-        private ConcurrentQueue<Tuple<IntPtr, long>> text;
         private long lastCleanup;
-        private IntPtr blankText;
 
         public void Initialize(DalamudPluginInterface pluginInterface)
         {
             lastCleanup = Ms();
             actionToDamageTypeDict = new Dictionary<uint, DamageType>();
             futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>>();
-            text = new ConcurrentQueue<Tuple<IntPtr, long>>();
             ignoredCastActions = new HashSet<uint>();
 
             pi = pluginInterface;
@@ -91,11 +88,6 @@ namespace DamageInfoPlugin
 
             try
             {
-                IntPtr createFlyTextFuncPtr = pi.TargetModuleScanner.ScanText(
-                    "48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 40 48 63 FA 45 8B F0 48 8B F1 83 FF 34 7C 13 33 C0 48 8B 74 24 ?? 48 8B 7C 24 ?? 48 83 C4 40 41 5E C3");
-                createFlyTextHook =
-                    new Hook<CreateFlyTextDelegate>(createFlyTextFuncPtr, (CreateFlyTextDelegate) CreateFlyText);
-
                 IntPtr receiveActionEffectFuncPtr =
                     pi.TargetModuleScanner.ScanText("4C 89 44 24 18 53 56 57 41 54 41 57 48 81 EC ?? 00 00 00 8B F9");
                 receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr,
@@ -107,29 +99,25 @@ namespace DamageInfoPlugin
                 
                 IntPtr setFocusTargetCastBarFuncPtr = pi.TargetModuleScanner.ScanText("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 41 0F B6 F9 49 8B E8 48 8B F2 48 8B D9");
                 setFocusTargetCastBarHook = new Hook<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, (SetCastBarDelegate) SetFocusTargetCastBarDetour);
+
+                pi.Framework.Gui.FlyText.OnFlyText += OnFlyText;
             }
             catch (Exception ex)
             {
                 PluginLog.Log($"Encountered an error loading DamageInfoPlugin: {ex.Message}");
                 PluginLog.Log("Plugin will not be loaded.");
 
-                createFlyTextHook?.Disable();
-                createFlyTextHook?.Dispose();
                 receiveActionEffectHook?.Disable();
                 receiveActionEffectHook?.Dispose();
                 setCastBarHook?.Disable();
                 setCastBarHook?.Dispose();
                 setFocusTargetCastBarHook?.Disable();
                 setFocusTargetCastBarHook?.Dispose();
-                Marshal.FreeHGlobal(blankText);
+                pi.CommandManager.RemoveHandler(CommandName);
 
                 throw;
             }
 
-            blankText = Marshal.AllocHGlobal(1);
-            Marshal.WriteByte(blankText, 0);
-
-            createFlyTextHook.Enable();
             receiveActionEffectHook.Enable();
             setCastBarHook.Enable();
             setFocusTargetCastBarHook.Enable();
@@ -143,14 +131,14 @@ namespace DamageInfoPlugin
             ClearFlyTextQueue();
             ResetMainTargetCastBar();
             ResetFocusTargetCastBar();
-            createFlyTextHook.Disable();
-            createFlyTextHook.Dispose();
-            receiveActionEffectHook.Disable();
-            receiveActionEffectHook.Dispose();
+            receiveActionEffectHook?.Disable();
+            receiveActionEffectHook?.Dispose();
             setCastBarHook?.Disable();
             setCastBarHook?.Dispose();
             setFocusTargetCastBarHook?.Disable();
             setFocusTargetCastBarHook?.Dispose();
+            
+            pi.Framework.Gui.FlyText.OnFlyText -= OnFlyText;
 
             futureFlyText = null;
             actionToDamageTypeDict = null;
@@ -162,11 +150,7 @@ namespace DamageInfoPlugin
 
         private void OnCommand(string command, string args)
         {
-#if DEBUG
-            ui.Visible = true;
-#else
             ui.SettingsVisible = true;
-#endif
         }
 
         private void DrawUI()
@@ -193,8 +177,8 @@ namespace DamageInfoPlugin
             return new CastbarInfo
             {
                 unitBase = unitbase,
-                gauge = (AtkImageNode*) unitbase->ULDData.NodeList[TargetInfoGaugeNodeIndex],
-                bg = (AtkImageNode*) unitbase->ULDData.NodeList[TargetInfoGaugeBgNodeIndex]
+                gauge = (AtkImageNode*) unitbase->UldManager.NodeList[TargetInfoGaugeNodeIndex],
+                bg = (AtkImageNode*) unitbase->UldManager.NodeList[TargetInfoGaugeBgNodeIndex]
             };
         }
 
@@ -207,8 +191,8 @@ namespace DamageInfoPlugin
             return new CastbarInfo
             {
                 unitBase = unitbase,
-                gauge = (AtkImageNode*) unitbase->ULDData.NodeList[TargetInfoSplitGaugeNodeIndex],
-                bg = (AtkImageNode*) unitbase->ULDData.NodeList[TargetInfoSplitGaugeBgNodeIndex]
+                gauge = (AtkImageNode*) unitbase->UldManager.NodeList[TargetInfoSplitGaugeNodeIndex],
+                bg = (AtkImageNode*) unitbase->UldManager.NodeList[TargetInfoSplitGaugeBgNodeIndex]
             };
         }
         
@@ -221,8 +205,8 @@ namespace DamageInfoPlugin
             return new CastbarInfo
             {
                 unitBase = unitbase,
-                gauge = (AtkImageNode*) unitbase->ULDData.NodeList[FocusTargetInfoGaugeNodeIndex],
-                bg = (AtkImageNode*) unitbase->ULDData.NodeList[FocusTargetInfoGaugeBgNodeIndex]
+                gauge = (AtkImageNode*) unitbase->UldManager.NodeList[FocusTargetInfoGaugeNodeIndex],
+                bg = (AtkImageNode*) unitbase->UldManager.NodeList[FocusTargetInfoGaugeBgNodeIndex]
             };
         }
         
@@ -250,12 +234,12 @@ namespace DamageInfoPlugin
             return 0;
         }
 
-        private string GetActorName(int id)
+        private SeString GetActorName(int id)
         {
             foreach (Actor t in pi.ClientState.Actors)
                 if (t != null)
                     if (id == t.ActorId)
-                        return t.Name;
+                        return pi.SeStringManager.Parse(t.Address + ActorOffsets.Name);
             return "";
         }
 
@@ -422,63 +406,34 @@ namespace DamageInfoPlugin
             
             hook.Original(thisPtr, a2, a3, a4, a5);
         }
-        
-        private delegate IntPtr CreateFlyTextDelegate(IntPtr flyTextMgr,
-            UInt32 kind, UInt32 val1, UInt32 val2,
-            IntPtr text1, UInt32 color, UInt32 icon, IntPtr text2, float unk3);
 
-        private IntPtr CreateFlyText(
-            IntPtr flyTextMgr, // or something
-            UInt32 kind,
-            UInt32 val1,
-            UInt32 val2,
-            IntPtr text1,
-            UInt32 color,
-            UInt32 icon,
-            IntPtr text2,
-            float unk3
-        )
+        private void OnFlyText(
+            ref FlyTextKind kind,
+            ref uint actorIndex,
+            ref uint val1,
+            ref uint val2,
+            ref SeString text1,
+            ref SeString text2,
+            ref uint color,
+            ref uint icon,
+            ref bool dirty,
+            ref bool handled)
         {
-            uint tColor = color;
-            uint tVal1 = val1;
-            IntPtr tText2 = text2;
-
             if (Randomize)
-            {
-                int ttVal1 = ModifyDamageALittle((int) val1);
-                tVal1 = (uint) ttVal1;
-            }
+                val1 = ModifyDamageALittle(val1);
 
             try
             {
-                if (Hijack)
-                {
-                    string hjText1 = Marshal.PtrToStringAnsi(HijackStruct.text1);
-                    string hjText2 = Marshal.PtrToStringAnsi(HijackStruct.text2);
-
-                    FlyTextLog(
-                        $"flytext hijacked: kind: {HijackStruct.kind}, val1: {HijackStruct.val1}, val2: {HijackStruct.val2}, color: {HijackStruct.color:X}, icon: {HijackStruct.icon}");
-                    FlyTextLog($"text1: {hjText1} | text2: {hjText2}");
-
-                    return createFlyTextHook.Original(flyTextMgr, HijackStruct.kind, HijackStruct.val1,
-                        HijackStruct.val2, HijackStruct.text1, HijackStruct.color, HijackStruct.icon,
-                        HijackStruct.text2, unk3);
-                }
-
-                FlyTextKind ftKind = (FlyTextKind) kind;
+                FlyTextKind ftKind = kind;
 
                 // wrap this here to lower overhead when not logging
                 if (configuration.FlyTextLogEnabled)
                 {
-                    string strText1 = Marshal.PtrToStringAnsi(text1);
-                    string strText2 = Marshal.PtrToStringAnsi(text2);
+                    var str1 = text1?.TextValue?.Replace("%", "%%");
+                    var str2 = text2?.TextValue?.Replace("%", "%%");
 
-                    strText1 = strText1?.Replace("%", "%%");
-                    strText2 = strText2?.Replace("%", "%%");
-
-                    FlyTextLog(
-                        $"flytext created: kind: {ftKind}, val1: {tVal1}, val2: {val2}, color: {color:X}, icon: {icon}");
-                    FlyTextLog($"text1: {strText1} | text2: {strText2}");
+                    FlyTextLog($"flytext created: kind: {ftKind} ({kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
+                    FlyTextLog($"text1: {str1} | text2: {str2}");
                 }
 
                 if (TryGetFlyTextDamageType(val1, out DamageType dmgType, out int sourceId))
@@ -488,7 +443,6 @@ namespace DamageInfoPlugin
 
                     if (configuration.OutgoingColorEnabled || configuration.IncomingColorEnabled)
                     {
-                        // sourceId == GetCharacterActorId() && configuration.OutgoingColorEnabled || (sourceId != GetCharacterActorId() && sourceId != FindCharaPet() && configuration.IncomingColorEnabled)
                         bool outPlayer = sourceId == charaId && configuration.OutgoingColorEnabled;
                         bool outPet = sourceId == petId && configuration.PetDamageColorEnabled;
                         bool outCheck = outPlayer || outPet;
@@ -512,13 +466,13 @@ namespace DamageInfoPlugin
                                 switch (dmgType)
                                 {
                                     case DamageType.Physical:
-                                        tColor = ImGui.GetColorU32(configuration.PhysicalColor);
+                                        color = ImGui.GetColorU32(configuration.PhysicalColor);
                                         break;
                                     case DamageType.Magic:
-                                        tColor = ImGui.GetColorU32(configuration.MagicColor);
+                                        color = ImGui.GetColorU32(configuration.MagicColor);
                                         break;
                                     case DamageType.Darkness:
-                                        tColor = ImGui.GetColorU32(configuration.DarknessColor);
+                                        color = ImGui.GetColorU32(configuration.DarknessColor);
                                         break;
                                 }
                             }
@@ -531,18 +485,14 @@ namespace DamageInfoPlugin
                         bool petCheck = sourceId == petId && configuration.PetSourceTextEnabled;
 
                         if (tgtCheck || petCheck)
-                        {
-                            text1 = GetNewTextPtr(sourceId, text1);
-                            if (text1 != IntPtr.Zero)
-                                text.Enqueue(new Tuple<IntPtr, long>(text1, Ms()));
-                        }
+                            text2 = GetNewText(sourceId, text2);
                     }
 
                     // Attack text checks
                     if ((sourceId != charaId && sourceId != petId && !configuration.IncomingAttackTextEnabled) ||
                         (sourceId == charaId && !configuration.OutgoingAttackTextEnabled) ||
                         (sourceId == petId && !configuration.PetAttackTextEnabled))
-                        tText2 = blankText;
+                        text1 = "";
                 }
             }
             catch (Exception e)
@@ -550,46 +500,44 @@ namespace DamageInfoPlugin
                 PluginLog.Log($"{e.Message} {e.StackTrace}");
             }
 
-            return createFlyTextHook.Original(flyTextMgr, kind, tVal1, val2, text1, tColor, icon, tText2, unk3);
+            dirty = true;
         }
 
-        private IntPtr GetNewTextPtr(int sourceId, IntPtr originalText)
+        private SeString GetNewText(int sourceId, SeString originalText)
         {
-            IntPtr ret = IntPtr.Zero;
-            string name = GetActorName(sourceId);
+            SeString name = GetActorName(sourceId);
+            var newPayloads = new List<Payload>();
 
-            if (string.IsNullOrEmpty(name)) return ret;
-
-            var newText = new List<byte>();
+            if (name.Payloads.Count == 0) return originalText;
             
             switch (pi.ClientState.ClientLanguage)
             {
                 case ClientLanguage.Japanese:
-                    newText.AddRange(Encoding.Default.GetBytes(name));
-                    newText.AddRange(Encoding.UTF8.GetBytes("から"));
+                    newPayloads.AddRange(name.Payloads);
+                    newPayloads.Add(new TextPayload("から"));
                     break;
                 case ClientLanguage.English:
-                    newText.AddRange(Encoding.Default.GetBytes($"from {name}"));
+                    newPayloads.Add(new TextPayload("from "));
+                    newPayloads.AddRange(name.Payloads);
                     break;
                 case ClientLanguage.German:
-                    newText.AddRange(Encoding.Default.GetBytes($"von {name}"));
+                    newPayloads.Add(new TextPayload("von "));
+                    newPayloads.AddRange(name.Payloads);
                     break;
                 case ClientLanguage.French:
-                    newText.AddRange(Encoding.Default.GetBytes($"de {name}"));
+                    newPayloads.Add(new TextPayload("de "));
+                    newPayloads.AddRange(name.Payloads);
                     break;
                 default:
-                    newText.AddRange(Encoding.Default.GetBytes($">{name}"));
+                    newPayloads.Add(new TextPayload(">"));
+                    newPayloads.AddRange(name.Payloads);
                     break;
             }
             
-            if (originalText != IntPtr.Zero)
-                newText.AddRange(Encoding.Default.GetBytes($" {Marshal.PtrToStringAnsi(originalText)}"));
+            if (originalText.Payloads.Count > 0)
+                newPayloads.AddRange(originalText.Payloads);
 
-            newText.Add(0);
-            ret = Marshal.AllocHGlobal(newText.Count);
-            Marshal.Copy(newText.ToArray(), 0, ret, newText.Count);
-
-            return ret;
+            return new SeString(newPayloads);
         }
 
         private delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr sourceCharacter, IntPtr pos,
@@ -744,10 +692,7 @@ namespace DamageInfoPlugin
         {
             type = DamageType.Unknown;
             sourceId = 0;
-            if (!futureFlyText.TryGetValue(dmg, out var list)) return false;
-
-            if (list.Count == 0)
-                return false;
+            if (!futureFlyText.TryGetValue(dmg, out var list) || list == null || list.Count == 0) return false;
 
             var item = list[0];
             foreach (var tuple in list)
@@ -792,8 +737,8 @@ namespace DamageInfoPlugin
             long ms = Ms();
             if (ms - lastCleanup < CleanupInterval) return;
 
-            FlyTextLog($"pre-cleanup flytext: {futureFlyText.Values.Count}");
-            FlyTextLog($"pre-cleanup text: {text.Count}");
+            // FlyTextLog($"pre-cleanup flytext: {futureFlyText.Values.Count}");
+            // FlyTextLog($"pre-cleanup text: {text.Count}");
             lastCleanup = ms;
 
             var toRemove = new List<uint>();
@@ -821,23 +766,11 @@ namespace DamageInfoPlugin
 
             foreach (uint key in toRemove)
                 futureFlyText.TryRemove(key, out var unused);
-
-            while (text.TryPeek(out var tup) && ms - tup?.Item2 >= 5000)
-            {
-                text.TryDequeue(out var newTup);
-                Marshal.FreeHGlobal(newTup.Item1);
-            }
-
-            FlyTextLog($"post-cleanup flytext: {futureFlyText.Values.Count}");
-            FlyTextLog($"post-cleanup text: {text.Count}");
+            
+            // FlyTextLog($"post-cleanup flytext: {futureFlyText.Values.Count}");
+            // FlyTextLog($"post-cleanup text: {text.Count}");
         }
-
-        public void ClearTextPtrs()
-        {
-            while (text.TryDequeue(out var tup))
-                Marshal.FreeHGlobal(tup.Item1);
-        }
-
+        
         public void ClearFlyTextQueue()
         {
             if (futureFlyText == null) return;
@@ -846,13 +779,13 @@ namespace DamageInfoPlugin
             futureFlyText.Clear();
         }
 
-        private int ModifyDamageALittle(int originalDamage)
+        private uint ModifyDamageALittle(uint originalDamage)
         {
             var margin = (int) Math.Truncate(originalDamage * 0.1);
             var rand = new Random();
-            var newDamage = rand.Next(originalDamage - margin, originalDamage + margin);
+            var newDamage = rand.Next(unchecked((int) originalDamage) - margin, unchecked((int) originalDamage) + margin);
             PluginLog.Log($"og dmg: {originalDamage}, new dmg: {newDamage}");
-            return newDamage;
+            return unchecked((uint) newDamage);
         }
     }
 }
