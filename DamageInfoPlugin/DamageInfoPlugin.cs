@@ -3,16 +3,16 @@ using Dalamud.Plugin;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud;
+using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
-using Dalamud.Game.ClientState.Structs;
 using Dalamud.Game.Internal.Gui;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
+using Dalamud.Logging;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
 using Action = Lumina.Excel.GeneratedSheets.Action;
@@ -104,8 +104,8 @@ namespace DamageInfoPlugin
             }
             catch (Exception ex)
             {
-                PluginLog.Log($"Encountered an error loading DamageInfoPlugin: {ex.Message}");
-                PluginLog.Log("Plugin will not be loaded.");
+                PluginLog.Information($"Encountered an error loading DamageInfoPlugin: {ex.Message}");
+                PluginLog.Information("Plugin will not be loaded.");
 
                 receiveActionEffectHook?.Disable();
                 receiveActionEffectHook?.Dispose();
@@ -210,9 +210,9 @@ namespace DamageInfoPlugin
             };
         }
         
-        private int FindCharaPet()
+        private uint FindCharaPet()
         {
-            int charaId = GetCharacterActorId();
+            var charaId = GetCharacterActorId();
             foreach (Actor a in pi.ClientState.Actors)
             {
                 if (!(a is BattleNpc npc)) continue;
@@ -224,14 +224,12 @@ namespace DamageInfoPlugin
                     return npc.ActorId;
             }
 
-            return -1;
+            return uint.MaxValue;
         }
 
-        private int GetCharacterActorId()
+        private uint GetCharacterActorId()
         {
-            if (pi.ClientState.LocalPlayer != null)
-                return pi.ClientState.LocalPlayer.ActorId;
-            return 0;
+            return pi.ClientState.LocalPlayer.ActorId;
         }
 
         private SeString GetActorName(int id)
@@ -409,21 +407,20 @@ namespace DamageInfoPlugin
 
         private void OnFlyText(
             ref FlyTextKind kind,
-            ref uint actorIndex,
-            ref uint val1,
-            ref uint val2,
+            ref int val1,
+            ref int val2,
             ref SeString text1,
             ref SeString text2,
             ref uint color,
             ref uint icon,
-            ref bool dirty,
+            ref float yOffset,
             ref bool handled)
         {
-            if (Randomize)
-                val1 = ModifyDamageALittle(val1);
-
             try
             {
+                if (Randomize)
+                    val1 = ModifyDamageALittle(val1);
+                
                 FlyTextKind ftKind = kind;
 
                 // wrap this here to lower overhead when not logging
@@ -432,14 +429,14 @@ namespace DamageInfoPlugin
                     var str1 = text1?.TextValue?.Replace("%", "%%");
                     var str2 = text2?.TextValue?.Replace("%", "%%");
 
-                    FlyTextLog($"flytext created: kind: {ftKind} ({kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
+                    FlyTextLog($"flytext created: kind: {ftKind} ({(int)kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
                     FlyTextLog($"text1: {str1} | text2: {str2}");
                 }
 
-                if (TryGetFlyTextDamageType(val1, out DamageType dmgType, out int sourceId))
+                if (TryGetFlyTextDamageType((uint)val1, out var dmgType, out int sourceId))
                 {
-                    int charaId = GetCharacterActorId();
-                    int petId = FindCharaPet();
+                    var charaId = GetCharacterActorId();
+                    var petId = FindCharaPet();
 
                     if (configuration.OutgoingColorEnabled || configuration.IncomingColorEnabled)
                     {
@@ -485,22 +482,25 @@ namespace DamageInfoPlugin
                         bool petCheck = sourceId == petId && configuration.PetSourceTextEnabled;
 
                         if (tgtCheck || petCheck)
+                        {
                             text2 = GetNewText(sourceId, text2);
+                        }
+                            
                     }
 
                     // Attack text checks
                     if ((sourceId != charaId && sourceId != petId && !configuration.IncomingAttackTextEnabled) ||
                         (sourceId == charaId && !configuration.OutgoingAttackTextEnabled) ||
                         (sourceId == petId && !configuration.PetAttackTextEnabled))
+                    {
                         text1 = "";
+                    }
                 }
             }
             catch (Exception e)
             {
-                PluginLog.Log($"{e.Message} {e.StackTrace}");
+                PluginLog.Information($"{e.Message} {e.StackTrace}");
             }
-
-            dirty = true;
         }
 
         private SeString GetNewText(int sourceId, SeString originalText)
@@ -544,8 +544,7 @@ namespace DamageInfoPlugin
             IntPtr effectHeader, IntPtr effectArray, IntPtr effectTrail);
 
         private void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr pos,
-            IntPtr effectHeader,
-            IntPtr effectArray, IntPtr effectTrail)
+            IntPtr effectHeader, IntPtr effectArray, IntPtr effectTrail)
         {
             try
             {
@@ -646,8 +645,8 @@ namespace DamageInfoPlugin
                         EffectLog($"{entries[i]}, s: {sourceId} t: {tTarget}");
                         if (tDmg == 0) continue;
 
-                        int actId = GetCharacterActorId();
-                        int charaPet = FindCharaPet();
+                        var actId = GetCharacterActorId();
+                        var charaPet = FindCharaPet();
 
                         // if source text is enabled, we know exactly when to add it
                         if (configuration.SourceTextEnabled &&
@@ -672,20 +671,20 @@ namespace DamageInfoPlugin
             }
             catch (Exception e)
             {
-                PluginLog.Log($"{e.Message} {e.StackTrace}");
+                PluginLog.Information($"{e.Message} {e.StackTrace}");
             }
         }
 
         private void EffectLog(string str)
         {
             if (configuration.EffectLogEnabled)
-                PluginLog.Log($"[effect] {str}");
+                PluginLog.Information($"[effect] {str}");
         }
 
         private void FlyTextLog(string str)
         {
             if (configuration.FlyTextLogEnabled)
-                PluginLog.Log($"[flytext] {str}");
+                PluginLog.Information($"[flytext] {str}");
         }
 
         private bool TryGetFlyTextDamageType(uint dmg, out DamageType type, out int sourceId)
@@ -779,13 +778,13 @@ namespace DamageInfoPlugin
             futureFlyText.Clear();
         }
 
-        private uint ModifyDamageALittle(uint originalDamage)
+        private int ModifyDamageALittle(int originalDamage)
         {
             var margin = (int) Math.Truncate(originalDamage * 0.1);
             var rand = new Random();
-            var newDamage = rand.Next(unchecked((int) originalDamage) - margin, unchecked((int) originalDamage) + margin);
-            PluginLog.Log($"og dmg: {originalDamage}, new dmg: {newDamage}");
-            return unchecked((uint) newDamage);
+            var newDamage = rand.Next(originalDamage - margin, originalDamage + margin);
+            PluginLog.Information($"og dmg: {originalDamage}, new dmg: {newDamage}");
+            return newDamage;
         }
     }
 }
