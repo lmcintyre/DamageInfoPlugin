@@ -6,9 +6,8 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud;
-using Dalamud.Game.ClientState.Actors.Types;
-using Dalamud.Game.ClientState.Actors.Types.NonPlayer;
-using Dalamud.Game.Internal.Gui;
+using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.Gui.FlyText;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
@@ -16,7 +15,6 @@ using Dalamud.Logging;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
 using Action = Lumina.Excel.GeneratedSheets.Action;
-using Actor = Dalamud.Game.ClientState.Actors.Types.Actor;
 
 namespace DamageInfoPlugin
 {
@@ -100,7 +98,7 @@ namespace DamageInfoPlugin
                 IntPtr setFocusTargetCastBarFuncPtr = pi.TargetModuleScanner.ScanText("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 41 0F B6 F9 49 8B E8 48 8B F2 48 8B D9");
                 setFocusTargetCastBarHook = new Hook<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, (SetCastBarDelegate) SetFocusTargetCastBarDetour);
 
-                pi.Framework.Gui.FlyText.OnFlyText += OnFlyText;
+                pi.Framework.Gui.FlyText.FlyTextCreated += OnFlyTextCreated;
             }
             catch (Exception ex)
             {
@@ -122,8 +120,8 @@ namespace DamageInfoPlugin
             setCastBarHook.Enable();
             setFocusTargetCastBarHook.Enable();
 
-            pi.UiBuilder.OnBuildUi += DrawUI;
-            pi.UiBuilder.OnOpenConfigUi += (_, _) => DrawConfigUI();
+            pi.UiBuilder.Draw += DrawUI;
+            pi.UiBuilder.OpenConfigUi += (_, _) => DrawConfigUI();
         }
 
         public void Dispose()
@@ -138,7 +136,7 @@ namespace DamageInfoPlugin
             setFocusTargetCastBarHook?.Disable();
             setFocusTargetCastBarHook?.Dispose();
             
-            pi.Framework.Gui.FlyText.OnFlyText -= OnFlyText;
+            pi.Framework.Gui.FlyText.FlyTextCreated -= OnFlyTextCreated;
 
             futureFlyText = null;
             actionToDamageTypeDict = null;
@@ -161,11 +159,6 @@ namespace DamageInfoPlugin
         private void DrawConfigUI()
         {
             ui.SettingsVisible = true;
-        }
-
-        private ushort GetCurrentCast(IntPtr actor)
-        {
-            return (ushort) Marshal.ReadInt16(actor, ActorOffsets.CurrentCastSpellActionId);
         }
         
         private CastbarInfo GetTargetInfoUiElements()
@@ -213,15 +206,15 @@ namespace DamageInfoPlugin
         private uint FindCharaPet()
         {
             var charaId = GetCharacterActorId();
-            foreach (Actor a in pi.ClientState.Actors)
+            foreach (GameObject go in pi.ClientState.Objects)
             {
-                if (!(a is BattleNpc npc)) continue;
+                if (go is not BattleNpc npc) continue;
 
                 IntPtr actPtr = npc.Address;
                 if (actPtr == IntPtr.Zero) continue;
 
                 if (npc.OwnerId == charaId)
-                    return npc.ActorId;
+                    return npc.ObjectId;
             }
 
             return uint.MaxValue;
@@ -229,15 +222,15 @@ namespace DamageInfoPlugin
 
         private uint GetCharacterActorId()
         {
-            return pi.ClientState.LocalPlayer.ActorId;
+            return pi.ClientState.LocalPlayer.ObjectId;
         }
 
         private SeString GetActorName(int id)
         {
-            foreach (Actor t in pi.ClientState.Actors)
-                if (t != null)
-                    if (id == t.ActorId)
-                        return pi.SeStringManager.Parse(t.Address + ActorOffsets.Name);
+            foreach (GameObject go in pi.ClientState.Objects)
+                if (go != null)
+                    if (id == go.ObjectId)
+                        return go.Name;
             return "";
         }
 
@@ -315,16 +308,13 @@ namespace DamageInfoPlugin
 
             if (thisPtr.ToPointer() == targetInfo.unitBase && !combinedInvalid)
             {
-                IntPtr? mainTarget = pi.ClientState?.Targets?.CurrentTarget?.Address;
-                ColorCastBar(mainTarget, targetInfo, setCastBarHook,
-                    thisPtr, a2, a3, a4, a5);
+                var mainTarget = pi.ClientState?.Targets?.Target;
+                ColorCastBar(mainTarget, targetInfo, setCastBarHook, thisPtr, a2, a3, a4, a5);
             }
-            else 
-            if (thisPtr.ToPointer() == splitInfo.unitBase && !splitInvalid)
+            else if (thisPtr.ToPointer() == splitInfo.unitBase && !splitInvalid)
             {
-                IntPtr? mainTarget = pi.ClientState?.Targets?.CurrentTarget?.Address;
-                ColorCastBar(mainTarget, splitInfo, setCastBarHook,
-                    thisPtr, a2, a3, a4, a5);
+                var mainTarget = pi.ClientState?.Targets?.Target;
+                ColorCastBar(mainTarget, splitInfo, setCastBarHook, thisPtr, a2, a3, a4, a5);
             }
         }
 
@@ -342,22 +332,21 @@ namespace DamageInfoPlugin
             
             if (thisPtr.ToPointer() == ftInfo.unitBase && !focusTargetInvalid)
             {
-                IntPtr? focusTarget = pi.ClientState?.Targets?.FocusTarget?.Address;
-                ColorCastBar(focusTarget, ftInfo, setFocusTargetCastBarHook,
-                                thisPtr, a2, a3, a4, a5);
+                GameObject focusTarget = pi.ClientState?.Targets?.FocusTarget;
+                ColorCastBar(focusTarget, ftInfo, setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
             }
         }
         
-        private void ColorCastBar(IntPtr? target, CastbarInfo info, Hook<SetCastBarDelegate> hook,
+        private void ColorCastBar(GameObject target, CastbarInfo info, Hook<SetCastBarDelegate> hook,
             IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
         {
-            if (!target.HasValue || target.Value == IntPtr.Zero)
+            if (target == null || target is not BattleNpc battleTarget)
             {
                 hook.Original(thisPtr, a2, a3, a4, a5);
                 return;
             }
-            
-            ushort actionId = GetCurrentCast(target.Value);
+
+            var actionId = battleTarget.CastActionId;
             
             actionToDamageTypeDict.TryGetValue(actionId, out DamageType type);
             if (ignoredCastActions.Contains(actionId))
@@ -405,7 +394,7 @@ namespace DamageInfoPlugin
             hook.Original(thisPtr, a2, a3, a4, a5);
         }
 
-        private void OnFlyText(
+        private void OnFlyTextCreated(
             ref FlyTextKind kind,
             ref int val1,
             ref int val2,

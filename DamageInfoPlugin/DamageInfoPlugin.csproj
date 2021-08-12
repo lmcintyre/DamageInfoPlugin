@@ -21,22 +21,22 @@
 
   <ItemGroup>
     <Reference Include="Dalamud, Version=6.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\DalamudNet5\bin\Debug\Dalamud.dll</HintPath>
+      <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\Dalamud.dll</HintPath>
     </Reference>
     <Reference Include="FFXIVClientStructs, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\DalamudNet5\bin\Debug\FFXIVClientStructs.dll</HintPath>
+      <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\FFXIVClientStructs.dll</HintPath>
     </Reference>
     <Reference Include="FFXIVClientStructs.Common, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\DalamudNet5\bin\Debug\FFXIVClientStructs.Common.dll</HintPath>
+      <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\FFXIVClientStructs.Common.dll</HintPath>
     </Reference>
     <Reference Include="FFXIVClientStructs.Generators, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\DalamudNet5\bin\Debug\FFXIVClientStructs.Generators.dll</HintPath>
+      <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\FFXIVClientStructs.Generators.dll</HintPath>
     </Reference>
     <Reference Include="ImGui.NET, Version=1.82.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\DalamudNet5\bin\Debug\ImGui.NET.dll</HintPath>
+      <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\ImGui.NET.dll</HintPath>
     </Reference>
     <Reference Include="ImGuiScene, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\DalamudNet5\bin\Debug\ImGuiScene.dll</HintPath>
+      <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\ImGuiScene.dll</HintPath>
     </Reference>
     <Reference Include="Lumina">
       <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\Lumina.dll</HintPath>
@@ -81,6 +81,6 @@
     <Content Include="DamageInfoPlugin.yaml" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DalamudPackager" Version="1.2.1" />
+    <PackageReference Include="DalamudPackager" Version="1.2.2" />
   </ItemGroup>
 </Project>
