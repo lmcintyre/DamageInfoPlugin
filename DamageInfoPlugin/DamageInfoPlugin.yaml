@@ -1,6 +1,11 @@
 ﻿name: Damage Info
 internal_name: DamageInfoPlugin
 author: perchbird
-description: |-
-  Configurable UI options for extra damage information. /dmginfo displays the config.
+punchline: Modifies in-game fly-text for more (or less) damage information.
+description: Configurable options for in-game fly text color based on damage type, with additional settings for damage source and fly text decluttering options.
 repo_url: https://github.com/lmcintyre/DamageInfoPlugin
+icon_url: https://raw.githubusercontent.com/lmcintyre/DamageInfoPlugin/main/images/icon.png
+image_urls:
+  - https://raw.githubusercontent.com/lmcintyre/DamageInfoPlugin/main/images/img1.png
+  - https://raw.githubusercontent.com/lmcintyre/DamageInfoPlugin/main/images/img2.png
+  - https://raw.githubusercontent.com/lmcintyre/DamageInfoPlugin/main/images/img3.png
