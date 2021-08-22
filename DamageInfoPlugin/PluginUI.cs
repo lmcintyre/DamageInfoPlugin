@@ -9,8 +9,6 @@ namespace DamageInfoPlugin
         private Configuration configuration;
         private DamageInfoPlugin damageInfoPlugin;
 
-        private bool randomize = false;
-
 		private bool visible = false;
         public bool Visible
         {

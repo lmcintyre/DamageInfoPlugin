@@ -52,41 +52,11 @@
       <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\Lumina.Excel.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\Newtonsoft.Json.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="System.Numerics.Vectors">
-      <HintPath>$(AppData)\XIVLauncher\addon\Hooks\dev\System.Numerics.Vectors.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="System">
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="System.Core">
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="System.Numerics">
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="System.Xml.Linq">
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="System.Data.DataSetExtensions">
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Microsoft.CSharp">
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="System.Data">
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="DamageInfoPlugin.yaml" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DalamudPackager" Version="1.2.2" />
+    <PackageReference Include="DalamudPackager" Version="1.2.3" />
   </ItemGroup>
 </Project>

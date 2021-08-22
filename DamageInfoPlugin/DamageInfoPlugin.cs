@@ -4,13 +4,18 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Dalamud;
+using Dalamud.Data;
+using Dalamud.Game;
+using Dalamud.Game.ClientState;
+using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.Gui;
 using Dalamud.Game.Gui.FlyText;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
+using Dalamud.IoC;
 using Dalamud.Logging;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
@@ -36,11 +41,16 @@ namespace DamageInfoPlugin
 
         private const string CommandName = "/dmginfo";
 
-        private DalamudPluginInterface pi;
         private Configuration configuration;
         private PluginUI ui;
 
-        public bool Randomize { get; set; }
+        private GameGui gameGui;
+        private DalamudPluginInterface pi;
+        private CommandManager cmdMgr;
+        private FlyTextGui ftGui;
+        private ObjectTable objectTable;
+        private ClientState clientState;
+        private TargetManager targetManager;
 
         private Hook<ReceiveActionEffectDelegate> receiveActionEffectHook;
         
@@ -49,29 +59,47 @@ namespace DamageInfoPlugin
 
         private CastbarInfo _nullCastbarInfo;
         private Dictionary<uint, DamageType> actionToDamageTypeDict;
+
         private HashSet<uint> ignoredCastActions;
+
         private ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>> futureFlyText;
+
         private long lastCleanup;
 
-        public void Initialize(DalamudPluginInterface pluginInterface)
+        public DamageInfoPlugin(
+            [RequiredVersion("1.0")] GameGui gameGui,
+            [RequiredVersion("1.0")] FlyTextGui ftGui,
+            [RequiredVersion("1.0")] DalamudPluginInterface pi,
+            [RequiredVersion("1.0")] CommandManager cmdMgr,
+            [RequiredVersion("1.0")] DataManager dataMgr,
+            [RequiredVersion("1.0")] ObjectTable objectTable,
+            [RequiredVersion("1.0")] ClientState clientState,
+            [RequiredVersion("1.0")] TargetManager targetManager,
+            [RequiredVersion("1.0")] SigScanner scanner)
         {
+            this.gameGui = gameGui;
+            this.ftGui = ftGui;
+            this.pi = pi;
+            this.cmdMgr = cmdMgr;
+            this.objectTable = objectTable;
+            this.clientState = clientState;
+            this.targetManager = targetManager;
+            
             lastCleanup = Ms();
             actionToDamageTypeDict = new Dictionary<uint, DamageType>();
             futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>>();
             ignoredCastActions = new HashSet<uint>();
 
-            pi = pluginInterface;
-
             configuration = pi.GetPluginConfig() as Configuration ?? new Configuration();
             configuration.Initialize(pi, this);
             ui = new PluginUI(configuration, this);
 
-            pi.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+            cmdMgr.AddHandler(CommandName, new CommandInfo(OnCommand)
                 {HelpMessage = "Display the Damage Info configuration interface."});
 
             _nullCastbarInfo = new CastbarInfo {unitBase = null, gauge = null, bg = null};
             
-            var actionSheet = pi.Data.GetExcelSheet<Action>();
+            var actionSheet = dataMgr.GetExcelSheet<Action>();
             foreach (var row in actionSheet)
             {
                 DamageType tmpType = (DamageType) row.AttackType.Row;
@@ -87,18 +115,18 @@ namespace DamageInfoPlugin
             try
             {
                 IntPtr receiveActionEffectFuncPtr =
-                    pi.TargetModuleScanner.ScanText("4C 89 44 24 18 53 56 57 41 54 41 57 48 81 EC ?? 00 00 00 8B F9");
+                    scanner.ScanText("4C 89 44 24 18 53 56 57 41 54 41 57 48 81 EC ?? 00 00 00 8B F9");
                 receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr,
                     (ReceiveActionEffectDelegate) ReceiveActionEffect);
 
-                IntPtr setCastBarFuncPtr = pi.TargetModuleScanner.ScanText(
+                IntPtr setCastBarFuncPtr = scanner.ScanText(
                     "48 89 5C 24 ?? 48 89 6C 24 ?? 56 48 83 EC 20 80 7C 24 ?? ?? 49 8B D9 49 8B E8 48 8B F2 74 22 49 8B 09 66 41 C7 41 ?? ?? ?? E8 ?? ?? ?? ?? 66 83 F8 69 75 0D 48 8B 0B BA ?? ?? ?? ?? E8 ?? ?? ?? ??");
                 setCastBarHook = new Hook<SetCastBarDelegate>(setCastBarFuncPtr, (SetCastBarDelegate) SetCastBarDetour);
                 
-                IntPtr setFocusTargetCastBarFuncPtr = pi.TargetModuleScanner.ScanText("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 41 0F B6 F9 49 8B E8 48 8B F2 48 8B D9");
+                IntPtr setFocusTargetCastBarFuncPtr = scanner.ScanText("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 41 0F B6 F9 49 8B E8 48 8B F2 48 8B D9");
                 setFocusTargetCastBarHook = new Hook<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, (SetCastBarDelegate) SetFocusTargetCastBarDetour);
 
-                pi.Framework.Gui.FlyText.FlyTextCreated += OnFlyTextCreated;
+                ftGui.FlyTextCreated += OnFlyTextCreated;
             }
             catch (Exception ex)
             {
@@ -111,7 +139,7 @@ namespace DamageInfoPlugin
                 setCastBarHook?.Dispose();
                 setFocusTargetCastBarHook?.Disable();
                 setFocusTargetCastBarHook?.Dispose();
-                pi.CommandManager.RemoveHandler(CommandName);
+                cmdMgr.RemoveHandler(CommandName);
 
                 throw;
             }
@@ -136,13 +164,13 @@ namespace DamageInfoPlugin
             setFocusTargetCastBarHook?.Disable();
             setFocusTargetCastBarHook?.Dispose();
             
-            pi.Framework.Gui.FlyText.FlyTextCreated -= OnFlyTextCreated;
+            ftGui.FlyTextCreated -= OnFlyTextCreated;
 
             futureFlyText = null;
             actionToDamageTypeDict = null;
 
             ui.Dispose();
-            pi.CommandManager.RemoveHandler(CommandName);
+            cmdMgr.RemoveHandler(CommandName);
             pi.Dispose();
         }
 
@@ -163,7 +191,7 @@ namespace DamageInfoPlugin
         
         private CastbarInfo GetTargetInfoUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_TargetInfo", 1).ToPointer();
+            AtkUnitBase* unitbase = (AtkUnitBase*) gameGui.GetAddonByName("_TargetInfo", 1).ToPointer();
 
             if (unitbase == null) return _nullCastbarInfo;
             
@@ -177,7 +205,7 @@ namespace DamageInfoPlugin
 
         private CastbarInfo GetTargetInfoSplitUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_TargetInfoCastBar", 1).ToPointer();
+            AtkUnitBase* unitbase = (AtkUnitBase*) gameGui.GetAddonByName("_TargetInfoCastBar", 1).ToPointer();
             
             if (unitbase == null) return _nullCastbarInfo;
             
@@ -191,7 +219,7 @@ namespace DamageInfoPlugin
         
         private CastbarInfo GetFocusTargetUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*) pi.Framework.Gui.GetUiObjectByName("_FocusTargetInfo", 1).ToPointer();
+            AtkUnitBase* unitbase = (AtkUnitBase*) gameGui.GetAddonByName("_FocusTargetInfo", 1).ToPointer();
             
             if (unitbase == null) return _nullCastbarInfo;
             
@@ -206,9 +234,9 @@ namespace DamageInfoPlugin
         private uint FindCharaPet()
         {
             var charaId = GetCharacterActorId();
-            foreach (GameObject go in pi.ClientState.Objects)
+            foreach (var obj in objectTable)
             {
-                if (go is not BattleNpc npc) continue;
+                if (obj is not BattleNpc npc) continue;
 
                 IntPtr actPtr = npc.Address;
                 if (actPtr == IntPtr.Zero) continue;
@@ -222,15 +250,15 @@ namespace DamageInfoPlugin
 
         private uint GetCharacterActorId()
         {
-            return pi.ClientState.LocalPlayer.ObjectId;
+            return clientState.LocalPlayer.ObjectId;
         }
 
         private SeString GetActorName(int id)
         {
-            foreach (GameObject go in pi.ClientState.Objects)
-                if (go != null)
-                    if (id == go.ObjectId)
-                        return go.Name;
+            foreach (var obj in objectTable)
+                if (obj != null)
+                    if (id == obj.ObjectId)
+                        return obj.Name;
             return "";
         }
 
@@ -308,12 +336,12 @@ namespace DamageInfoPlugin
 
             if (thisPtr.ToPointer() == targetInfo.unitBase && !combinedInvalid)
             {
-                var mainTarget = pi.ClientState?.Targets?.Target;
+                var mainTarget = targetManager.Target;
                 ColorCastBar(mainTarget, targetInfo, setCastBarHook, thisPtr, a2, a3, a4, a5);
             }
             else if (thisPtr.ToPointer() == splitInfo.unitBase && !splitInvalid)
             {
-                var mainTarget = pi.ClientState?.Targets?.Target;
+                var mainTarget = targetManager.Target;
                 ColorCastBar(mainTarget, splitInfo, setCastBarHook, thisPtr, a2, a3, a4, a5);
             }
         }
@@ -332,7 +360,7 @@ namespace DamageInfoPlugin
             
             if (thisPtr.ToPointer() == ftInfo.unitBase && !focusTargetInvalid)
             {
-                GameObject focusTarget = pi.ClientState?.Targets?.FocusTarget;
+                GameObject focusTarget = targetManager.FocusTarget;
                 ColorCastBar(focusTarget, ftInfo, setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
             }
         }
@@ -407,9 +435,6 @@ namespace DamageInfoPlugin
         {
             try
             {
-                if (Randomize)
-                    val1 = ModifyDamageALittle(val1);
-                
                 FlyTextKind ftKind = kind;
 
                 // wrap this here to lower overhead when not logging
@@ -499,7 +524,7 @@ namespace DamageInfoPlugin
 
             if (name.Payloads.Count == 0) return originalText;
             
-            switch (pi.ClientState.ClientLanguage)
+            switch (clientState.ClientLanguage)
             {
                 case ClientLanguage.Japanese:
                     newPayloads.AddRange(name.Payloads);
@@ -765,15 +790,6 @@ namespace DamageInfoPlugin
 
             FlyTextLog($"clearing flytext queue of {futureFlyText.Values.Count} items...");
             futureFlyText.Clear();
-        }
-
-        private int ModifyDamageALittle(int originalDamage)
-        {
-            var margin = (int) Math.Truncate(originalDamage * 0.1);
-            var rand = new Random();
-            var newDamage = rand.Next(originalDamage - margin, originalDamage + margin);
-            PluginLog.Information($"og dmg: {originalDamage}, new dmg: {newDamage}");
-            return newDamage;
         }
     }
 }
