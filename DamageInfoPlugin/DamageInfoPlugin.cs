@@ -149,7 +149,7 @@ namespace DamageInfoPlugin
             setFocusTargetCastBarHook.Enable();
 
             pi.UiBuilder.Draw += DrawUI;
-            pi.UiBuilder.OpenConfigUi += (_, _) => DrawConfigUI();
+            pi.UiBuilder.OpenConfigUi += DrawConfigUI;
         }
 
         public void Dispose()
