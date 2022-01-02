@@ -58,16 +58,17 @@ namespace DamageInfoPlugin
 	            var bgDark = configuration.DarknessBgColor;
 	            var castBarConfigValue = configuration.MainTargetCastBarColorEnabled;
 	            var ftCastBarConfigValue = configuration.FocusTargetCastBarColorEnabled;
-	            var effectLogConfigValue = configuration.EffectLogEnabled;
-	            var flytextLogConfigValue = configuration.FlyTextLogEnabled;
-	            var colorIncTextConfigValue = configuration.IncomingColorEnabled;
-	            var colorOutTextConfigValue = configuration.OutgoingColorEnabled;
-	            var petColorConfigValue = configuration.PetDamageColorEnabled;
+	            var debugLogConfigValue = configuration.DebugLogEnabled;
+	            var colorConfigValue = configuration.ColorEnabled;
 	            var sourceTextConfigValue = configuration.SourceTextEnabled;
 	            var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
 	            var incAttackTextConfigValue = configuration.IncomingAttackTextEnabled;
 	            var outAttackTextConfigValue = configuration.OutgoingAttackTextEnabled;
 	            var petAttackTextConfigValue = configuration.PetAttackTextEnabled;
+	            
+	            // computed state
+	            var sourceTextAllConfigValue = sourceTextConfigValue && petSourceTextConfigValue;
+	            var attackTextAllConfigValue = incAttackTextConfigValue && outAttackTextConfigValue && petAttackTextConfigValue;
 
 	            if (ImGui.CollapsingHeader("Damage type information"))
 	            {
@@ -95,13 +96,36 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("Attack Text");
 		            ImGui.NextColumn();
-		            ImGui.Text("Incoming Damage");
+		            ImGui.Text("All");
 		            ImGui.NextColumn();
-		            if (ImGui.Checkbox("##incomingcolor", ref colorIncTextConfigValue))
+		            if (ImGui.Checkbox("##allcolor", ref colorConfigValue))
 		            {
-			            configuration.IncomingColorEnabled = colorIncTextConfigValue;
+			            configuration.ColorEnabled = colorConfigValue;
 			            configuration.Save();
 		            }
+		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##allsource", ref sourceTextAllConfigValue))
+		            {
+			            configuration.SourceTextEnabled = sourceTextAllConfigValue;
+			            configuration.PetSourceTextEnabled = sourceTextAllConfigValue;
+			            configuration.Save();
+		            }
+		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##allattacktext", ref attackTextAllConfigValue))
+		            {
+			            configuration.IncomingAttackTextEnabled = attackTextAllConfigValue;
+			            configuration.OutgoingAttackTextEnabled = attackTextAllConfigValue;
+			            configuration.PetAttackTextEnabled = attackTextAllConfigValue;
+			            configuration.Save();
+		            }
+		            ImGui.NextColumn();
+		            ImGui.Text("Incoming Damage");
+		            ImGui.NextColumn();
+		            // if (ImGui.Checkbox("##incomingcolor", ref colorIncTextConfigValue))
+		            // {
+			            // configuration.IncomingColorEnabled = colorIncTextConfigValue;
+			            // configuration.Save();
+		            // }
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##incomingsource", ref sourceTextConfigValue))
 		            {
@@ -117,11 +141,11 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("Outgoing Damage");
 		            ImGui.NextColumn();
-		            if (ImGui.Checkbox("##outgoingcolor", ref colorOutTextConfigValue))
-		            {
-			            configuration.OutgoingColorEnabled = colorOutTextConfigValue;
-			            configuration.Save();
-		            }
+		            // if (ImGui.Checkbox("##outgoingcolor", ref colorOutTextConfigValue))
+		            // {
+			            // configuration.OutgoingColorEnabled = colorOutTextConfigValue;
+			            // configuration.Save();
+		            // }
 		            ImGui.NextColumn();
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##outgoingattack", ref outAttackTextConfigValue))
@@ -132,11 +156,11 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("Pet");
 		            ImGui.NextColumn();
-		            if (ImGui.Checkbox("##petcolor", ref petColorConfigValue))
-		            {
-			            configuration.PetDamageColorEnabled = petColorConfigValue;
-			            configuration.Save();
-		            }
+		            // if (ImGui.Checkbox("##petcolor", ref petColorConfigValue))
+		            // {
+			            // configuration.PetDamageColorEnabled = petColorConfigValue;
+			            // configuration.Save();
+		            // }
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##petsourcetext", ref petSourceTextConfigValue))
 		            {
@@ -238,15 +262,9 @@ namespace DamageInfoPlugin
 	            
 	            if (ImGui.CollapsingHeader("Debug"))
 	            {
-		            if (ImGui.Checkbox("EffectLog Enabled", ref effectLogConfigValue))
+		            if (ImGui.Checkbox("Enable Debug Logging", ref debugLogConfigValue))
 		            {
-			            configuration.EffectLogEnabled = effectLogConfigValue;
-			            configuration.Save();
-		            }
-
-		            if (ImGui.Checkbox("FlyTextLog Enabled", ref flytextLogConfigValue))
-		            {
-			            configuration.FlyTextLogEnabled = flytextLogConfigValue;
+			            configuration.DebugLogEnabled = debugLogConfigValue;
 			            configuration.Save();
 		            }
 	            }

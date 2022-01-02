@@ -22,12 +22,9 @@ namespace DamageInfoPlugin
         public Vector4 MagicBgColor { get; set; } = new Vector4(1, 1, 1, 1);
         public Vector4 DarknessBgColor { get; set; } = new Vector4(1, 1, 1, 1);
 
-        public bool EffectLogEnabled { get; set; } = false;
-        public bool FlyTextLogEnabled { get; set; } = false;
+        public bool DebugLogEnabled { get; set; } = false;
 
-        private bool _incomingColorEnabled = true;
-        private bool _outgoingColorEnabled = true;
-        private bool _petDamageColorEnabled = true;
+        private bool _colorEnabled = true;
         private bool _sourceTextEnabled = true;
         private bool _petSourceTextEnabled = false;
         private bool _mainTargetCastBarColorEnabled = false;
@@ -35,32 +32,11 @@ namespace DamageInfoPlugin
         private bool _incomingAttackTextEnabled = true;
         private bool _outgoingAttackTextEnabled = true;
         private bool _petAttackTextEnabled = true;
-        
-        public bool IncomingColorEnabled {
-	        get => _incomingColorEnabled;
-	        set {
-		        if (!value) {
-                    if (!_outgoingColorEnabled)
-						dmgPlugin?.ClearFlyTextQueue();
-                }
-                    
-                _incomingColorEnabled = value;
-	        }
-        }
 
-        public bool OutgoingColorEnabled
+        public bool ColorEnabled
         {
-	        get => _outgoingColorEnabled;
-	        set
-	        {
-		        if (!value) {
-                    if (!_incomingColorEnabled)
-						dmgPlugin?.ClearFlyTextQueue();
-			        _petDamageColorEnabled = false;
-		        }
-			        
-		        _outgoingColorEnabled = value;
-	        }
+	        get => _colorEnabled;
+	        set => _colorEnabled = value;
         }
 
         public bool SourceTextEnabled {
@@ -70,15 +46,6 @@ namespace DamageInfoPlugin
 				    _petSourceTextEnabled = false;
                 }
 		        _sourceTextEnabled = value;
-	        }
-        }
-
-        public bool PetDamageColorEnabled {
-	        get => _petDamageColorEnabled;
-	        set {
-		        if (value)
-			        _outgoingColorEnabled = true;
-		        _petDamageColorEnabled = value;
 	        }
         }
 
