@@ -35,21 +35,4 @@ namespace DamageInfoPlugin
             return HashCode.Combine(actionId, (int)kind, sourceId, targetId, value);
         }
     }
-
-    // public struct EffectEntry
-    // {
-    //     public ActionEffectType type;
-    //     public byte param0;
-    //     public byte param1;
-    //     public byte param2;
-    //     public byte mult;
-    //     public byte flags;
-    //     public ushort value;
-    //
-    //     public override string ToString()
-    //     {
-    //         return
-    //             $"Type: {type}, p0: {param0}, p1: {param1}, p2: {param2}, mult: {mult}, flags: {flags} | {Convert.ToString(flags, 2)}, value: {value}";
-    //     }
-    // }
 }

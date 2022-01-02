@@ -3,7 +3,8 @@
     public enum LogType
     {
         FlyText,
-        ScreenLog
+        ScreenLog,
+        FlyTextWrite
     }
 
     public enum DamageType

@@ -446,29 +446,36 @@ namespace DamageInfoPlugin
             int val3,
             int val4)
         {
-            var targetId = target->GameObject.ObjectID;
-            var sourceId = source->GameObject.ObjectID;
-            
-            if (_configuration.DebugLogEnabled)
+            try
             {
-                DebugLog(LogType.ScreenLog, $"[ScreenLog] {option} {actionKind} {actionId}");
-                DebugLog(LogType.ScreenLog, $"[ScreenLog] {val1} {val2} {val3} {val4}");
-                var targetName = _objectTable.SearchById(targetId)?.Name;
-                var sourceName  = _objectTable.SearchById(sourceId)?.Name;
-                DebugLog(LogType.ScreenLog, $"[ScreenLog] src {sourceId} {sourceName}");
-                DebugLog(LogType.ScreenLog, $"[ScreenLog] tgt {targetId} {targetName}");    
+                var targetId = target->GameObject.ObjectID;
+                var sourceId = source->GameObject.ObjectID;
+            
+                if (_configuration.DebugLogEnabled)
+                {
+                    DebugLog(LogType.ScreenLog, $"{option} {actionKind} {actionId}");
+                    DebugLog(LogType.ScreenLog, $"{val1} {val2} {val3} {val4}");
+                    var targetName = _objectTable.SearchById(targetId)?.Name;
+                    var sourceName  = _objectTable.SearchById(sourceId)?.Name;
+                    DebugLog(LogType.ScreenLog, $"src {sourceId} {sourceName}");
+                    DebugLog(LogType.ScreenLog, $"tgt {targetId} {targetName}");    
+                }
+            
+                _actions.Add(new ScreenLogInfo
+                {
+                    actionId = (uint) actionId,
+                    kind = logKind,
+                    sourceId = sourceId,
+                    targetId = targetId,
+                    value = val1,
+                });
+            
+                _addScreenLogHook.Original(target, source, logKind, option, actionKind, actionId, val1, val2, val3, val4);
             }
-            
-            _actions.Add(new ScreenLogInfo
+            catch (Exception e)
             {
-                actionId = (uint) actionId,
-                kind = logKind,
-                sourceId = sourceId,
-                targetId = targetId,
-                value = val1,
-            });
-            
-            _addScreenLogHook.Original(target, source, logKind, option, actionKind, actionId, val1, val2, val3, val4);
+                PluginLog.Error(e, "An error occurred in Damage Info.");
+            }
         }
 
         private IntPtr WriteFlyTextDataDetour(IntPtr a1, NumberArrayData* numberArray, uint numberArrayIndex, IntPtr a4, int a5, int* ftData, uint a7, uint a8)
@@ -477,23 +484,32 @@ namespace DamageInfoPlugin
 
             if (numberArray == null || ftData == null || !_configuration.ColorEnabled) return result;
             
-            var ftKind = (FlyTextKind) ftData[0];
-            var actionId = (uint) ftData[2];
-            if (actionId == 0) return result;
+            for (int i = 0; i < 5; i++)
+                DebugLog(LogType.FlyTextWrite, $"ftData[{i}]: {ftData[i]}");
             
-            var dmgType = _actionToDamageTypeDict[actionId];
-            var color = 0;
-
-            if (!IsColorableFlyText(ftKind)) return result;
-
-            color = dmgType switch
+            try
             {
-                DamageType.Physical => (int)ImGui.GetColorU32(_configuration.PhysicalColor),
-                DamageType.Magic => (int)ImGui.GetColorU32(_configuration.MagicColor),
-                DamageType.Darkness => (int)ImGui.GetColorU32(_configuration.DarknessColor),
-                _ => color
-            };
-            numberArray->IntArray[numberArrayIndex + 5] = color;
+                var ftKind = (FlyTextKind) ftData[0];
+                if (!IsColorableFlyText(ftKind)) return result;
+                
+                var actionId = (uint) ftData[2];
+                if (actionId == 0 || !_actionToDamageTypeDict.TryGetValue(actionId, out var dmgType)) return result;
+                
+                var color = 0;
+                color = dmgType switch
+                {
+                    DamageType.Physical => (int)ImGui.GetColorU32(_configuration.PhysicalColor),
+                    DamageType.Magic => (int)ImGui.GetColorU32(_configuration.MagicColor),
+                    DamageType.Darkness => (int)ImGui.GetColorU32(_configuration.DarknessColor),
+                    _ => color
+                };
+                numberArray->IntArray[numberArrayIndex + 5] = color;
+            }
+            catch (Exception e)
+            {
+                PluginLog.Error(e, "An error occurred in Damage Info.");
+            }
+            
             return result;
         }
 
