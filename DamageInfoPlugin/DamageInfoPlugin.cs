@@ -2,6 +2,7 @@ using Dalamud.Game.Command;
 using Dalamud.Plugin;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using Dalamud;
@@ -203,21 +204,22 @@ namespace DamageInfoPlugin
             _ui.SettingsVisible = true;
         }
 
-        private uint FindCharaPet()
+        private List<uint> FindCharaPets()
         {
+            var results = new List<uint>();
             var charaId = GetCharacterActorId();
             foreach (var obj in _objectTable)
             {
                 if (obj is not BattleNpc npc) continue;
 
-                IntPtr actPtr = npc.Address;
+                var actPtr = npc.Address;
                 if (actPtr == IntPtr.Zero) continue;
 
                 if (npc.OwnerId == charaId)
-                    return npc.ObjectId;
+                    results.Add(npc.ObjectId);
             }
 
-            return uint.MaxValue;
+            return results;
         }
 
         private uint GetCharacterActorId()
@@ -455,20 +457,23 @@ namespace DamageInfoPlugin
                 {
                     DebugLog(LogType.ScreenLog, $"{option} {actionKind} {actionId}");
                     DebugLog(LogType.ScreenLog, $"{val1} {val2} {val3} {val4}");
-                    var targetName = _objectTable.SearchById(targetId)?.Name;
-                    var sourceName  = _objectTable.SearchById(sourceId)?.Name;
+                    var targetName = GetName(targetId);
+                    var sourceName  = GetName(sourceId);
                     DebugLog(LogType.ScreenLog, $"src {sourceId} {sourceName}");
                     DebugLog(LogType.ScreenLog, $"tgt {targetId} {targetName}");    
                 }
             
-                _actions.Add(new ScreenLogInfo
+                var action = new ScreenLogInfo
                 {
                     actionId = (uint) actionId,
                     kind = logKind,
                     sourceId = sourceId,
                     targetId = targetId,
                     value = val1,
-                });
+                };
+
+                _actions.Add(action);
+                DebugLog(LogType.ScreenLog, $"added action: {action}");
             
                 _addScreenLogHook.Original(target, source, logKind, option, actionKind, actionId, val1, val2, val3, val4);
             }
@@ -483,9 +488,13 @@ namespace DamageInfoPlugin
             var result = _writeFlyTextHook.Original(a1, numberArray, numberArrayIndex, a4, a5, ftData, a7, a8);
 
             if (numberArray == null || ftData == null || !_configuration.ColorEnabled) return result;
+
+            // We really only operate on flytext that hasn't already been colored
+            // People don't like their heals to be colored so fail fast...
+            if ((uint) numberArray->IntArray[numberArrayIndex + 5] != 0xFF0061E3) return result;
             
-            for (int i = 0; i < 5; i++)
-                DebugLog(LogType.FlyTextWrite, $"ftData[{i}]: {ftData[i]}");
+            // for (int i = 0; i < 5; i++)
+                // DebugLog(LogType.FlyTextWrite, $"ftData[{i}]: {ftData[i]}");
             
             try
             {
@@ -503,13 +512,14 @@ namespace DamageInfoPlugin
                     DamageType.Darkness => (int)ImGui.GetColorU32(_configuration.DarknessColor),
                     _ => color
                 };
+                // var color2 = (uint) numberArray->IntArray[numberArrayIndex + 5];
+                // DebugLog(LogType.FlyTextWrite, $"color was {color2} {color2:X}");
                 numberArray->IntArray[numberArrayIndex + 5] = color;
             }
             catch (Exception e)
             {
                 PluginLog.Error(e, "An error occurred in Damage Info.");
             }
-            
             return result;
         }
 
@@ -537,23 +547,21 @@ namespace DamageInfoPlugin
 
                 var ftKind = kind;
                 var ftVal1 = val1;
-                var charaActorId = GetCharacterActorId();
-                var charaPetId = FindCharaPet();
-                var action = 
-                    _actions.FirstOrDefault(
-                        x => x.kind == ftKind 
-                             && x.value == ftVal1 
-                             && (x.sourceId == charaActorId || x.sourceId == charaPetId || x.targetId == charaActorId));
-
-                if (!_actions.Remove(action)) return;
-                
                 var charaId = GetCharacterActorId();
-                var petId = FindCharaPet();
-                
+                var petIds = FindCharaPets();
+                var action = _actions.FirstOrDefault(x => x.kind == ftKind && x.value == ftVal1 && TargetCheck(x, charaId, petIds));
+
+                if (!_actions.Remove(action))
+                {
+                    DebugLog(LogType.FlyText, $"action not found!");
+                    DebugLog(LogType.FlyText, $"we wanted an action with kind: {ftKind} value: {ftVal1} charaId: {charaId} (0x{charaId:X}) petIds: {string.Join(", ", petIds)}");
+                    return;
+                }
+
                 if (_configuration.SourceTextEnabled)
                 {
-                    bool tgtCheck = action.sourceId != charaId && action.sourceId != petId;
-                    bool petCheck = action.sourceId == petId && _configuration.PetSourceTextEnabled;
+                    bool tgtCheck = action.sourceId != charaId && !petIds.Contains(action.sourceId);
+                    bool petCheck = petIds.Contains(action.sourceId) && _configuration.PetSourceTextEnabled;
                 
                     if (tgtCheck || petCheck)
                     {
@@ -562,9 +570,9 @@ namespace DamageInfoPlugin
                 }
                 
                 // Attack text checks
-                if ((action.sourceId != charaId && action.sourceId != petId && !_configuration.IncomingAttackTextEnabled)
+                if ((action.sourceId != charaId && !petIds.Contains(action.sourceId) && !_configuration.IncomingAttackTextEnabled)
                     || (action.sourceId == charaId && !_configuration.OutgoingAttackTextEnabled)
-                    || (action.sourceId == petId && !_configuration.PetAttackTextEnabled))
+                    || (petIds.Contains(action.sourceId) && !_configuration.PetAttackTextEnabled))
                 {
                     text1 = "";
                 }
@@ -573,6 +581,11 @@ namespace DamageInfoPlugin
             {
                 PluginLog.Information($"{e.Message} {e.StackTrace}");
             }
+        }
+
+        private bool TargetCheck(ScreenLogInfo screenLogInfo, uint charaId, List<uint> petIds)
+        {
+            return screenLogInfo.sourceId == charaId || screenLogInfo.targetId == charaId || petIds.Contains(screenLogInfo.sourceId);
         }
 
         private SeString GetNewText(uint sourceId, SeString originalText)
@@ -610,6 +623,11 @@ namespace DamageInfoPlugin
                 newPayloads.AddRange(originalText.Payloads);
 
             return new SeString(newPayloads);
+        }
+
+        private SeString GetName(uint id)
+        {
+            return _objectTable.SearchById(id)?.Name ?? SeString.Empty;
         }
 
         private void DebugLog(LogType type, string str)

@@ -34,5 +34,11 @@ namespace DamageInfoPlugin
         {
             return HashCode.Combine(actionId, (int)kind, sourceId, targetId, value);
         }
+
+        public override string ToString()
+        {
+            return
+                $"actionId: {actionId} kind: {kind} ({(int)kind}) sourceId: {sourceId} (0x{sourceId:X}) targetId: {targetId} (0x{targetId:X}) value: {value}";
+        }
     }
 }
