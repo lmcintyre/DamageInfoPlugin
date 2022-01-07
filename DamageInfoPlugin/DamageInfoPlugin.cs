@@ -2,7 +2,6 @@ using Dalamud.Game.Command;
 using Dalamud.Plugin;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using Dalamud;
@@ -69,7 +68,8 @@ namespace DamageInfoPlugin
         private delegate IntPtr WriteFlyTextDataDelegate(IntPtr a1, NumberArrayData* numberArray, uint numberArrayIndex, IntPtr a4, int a5, int* ftData, uint a7, uint a8);
         private readonly Hook<WriteFlyTextDataDelegate> _writeFlyTextHook;
 
-        private Dictionary<uint, DamageType> _actionToDamageTypeDict;
+        private readonly Dictionary<uint, DamageType> _actionToDamageTypeDict;
+        private readonly HashSet<uint> _healingActions;
         private readonly CastbarInfo _nullCastbarInfo;
         private readonly HashSet<uint> _ignoredCastActions;
         private readonly List<ScreenLogInfo> _actions;
@@ -94,6 +94,7 @@ namespace DamageInfoPlugin
             _targetManager = targetManager;
 
             _actionToDamageTypeDict = new Dictionary<uint, DamageType>();
+            _healingActions = new HashSet<uint>();
             _actions = new List<ScreenLogInfo>();
             _ignoredCastActions = new HashSet<uint>();
 
@@ -123,6 +124,9 @@ namespace DamageInfoPlugin
 
                     if (row.ActionCategory.Row is > 4 and < 11)
                         _ignoredCastActions.Add(row.ActionCategory.Row);
+
+                    if (row.Unknown4 == 2)
+                        _healingActions.Add(row.RowId);
                 }
                 
                 var writeFtPtr = scanner.ScanText("E8 ?? ?? ?? ?? 83 F8 01 75 45");
@@ -182,7 +186,6 @@ namespace DamageInfoPlugin
             _ftGui.FlyTextCreated -= OnFlyTextCreated;
 
             _actionToDamageTypeDict.Clear();
-            _actionToDamageTypeDict = null;
 
             _ui.Dispose();
             _cmdMgr.RemoveHandler(CommandName);
@@ -474,6 +477,7 @@ namespace DamageInfoPlugin
 
                 _actions.Add(action);
                 DebugLog(LogType.ScreenLog, $"added action: {action}");
+                DebugLog(LogType.ScreenLog, $"_actions size: {_actions.Count}");
             
                 _addScreenLogHook.Original(target, source, logKind, option, actionKind, actionId, val1, val2, val3, val4);
             }
@@ -489,9 +493,8 @@ namespace DamageInfoPlugin
 
             if (numberArray == null || ftData == null || !_configuration.ColorEnabled) return result;
 
-            // We really only operate on flytext that hasn't already been colored
             // People don't like their heals to be colored so fail fast...
-            if ((uint) numberArray->IntArray[numberArrayIndex + 5] != 0xFF0061E3) return result;
+            if ((uint) numberArray->IntArray[numberArrayIndex + 5] == 0xFF005D2A) return result;
             
             // for (int i = 0; i < 5; i++)
                 // DebugLog(LogType.FlyTextWrite, $"ftData[{i}]: {ftData[i]}");
@@ -512,8 +515,8 @@ namespace DamageInfoPlugin
                     DamageType.Darkness => (int)ImGui.GetColorU32(_configuration.DarknessColor),
                     _ => color
                 };
-                // var color2 = (uint) numberArray->IntArray[numberArrayIndex + 5];
-                // DebugLog(LogType.FlyTextWrite, $"color was {color2} {color2:X}");
+                var color2 = (uint) numberArray->IntArray[numberArrayIndex + 5];
+                DebugLog(LogType.FlyTextWrite, $"color was {color2} {color2:X}");
                 numberArray->IntArray[numberArrayIndex + 5] = color;
             }
             catch (Exception e)
@@ -558,28 +561,49 @@ namespace DamageInfoPlugin
                     return;
                 }
 
-                if (_configuration.SourceTextEnabled)
+                var isHealingAction = _healingActions.Contains(action.actionId);
+                var isPetAction = petIds.Contains(action.sourceId);
+                var isCharaAction = action.sourceId == charaId;
+                var isCharaTarget = action.targetId == charaId;
+
+                if (_configuration.SourceTextEnabled || _configuration.PetSourceTextEnabled || _configuration.HealSourceTextEnabled)
                 {
-                    bool tgtCheck = action.sourceId != charaId && !petIds.Contains(action.sourceId);
-                    bool petCheck = petIds.Contains(action.sourceId) && _configuration.PetSourceTextEnabled;
+                    var tgtCheck = !isCharaAction && !isHealingAction && !isPetAction && _configuration.SourceTextEnabled;
+                    var petCheck = isPetAction && _configuration.PetSourceTextEnabled;
+                    var healCheck = isHealingAction && _configuration.HealSourceTextEnabled;
                 
-                    if (tgtCheck || petCheck)
+                    if (tgtCheck || petCheck || healCheck)
                     {
                         text2 = GetNewText(action.sourceId, text2);
                     }
                 }
                 
                 // Attack text checks
-                if ((action.sourceId != charaId && !petIds.Contains(action.sourceId) && !_configuration.IncomingAttackTextEnabled)
-                    || (action.sourceId == charaId && !_configuration.OutgoingAttackTextEnabled)
-                    || (petIds.Contains(action.sourceId) && !_configuration.PetAttackTextEnabled))
+                if (!_configuration.IncomingAttackTextEnabled
+                    || !_configuration.OutgoingAttackTextEnabled
+                    || !_configuration.PetAttackTextEnabled
+                    || !_configuration.HealAttackTextEnabled)
                 {
-                    text1 = "";
+                    var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && !isPetAction && !_configuration.IncomingAttackTextEnabled;
+                    var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && !isPetAction && !_configuration.OutgoingAttackTextEnabled;
+                    var petCheck = !isCharaAction && !isHealingAction && !isPetAction && !isCharaTarget && !_configuration.PetAttackTextEnabled;
+                    var healCheck = isHealingAction && !isPetAction && _configuration.HealAttackTextEnabled;
+
+                    if (incomingCheck || outgoingCheck || petCheck || healCheck)
+                        text1 = "";
                 }
+                
+                // if ((!isCharaAction && !isPetAction && !isHealingAction && !_configuration.IncomingAttackTextEnabled)
+                //     || (isCharaAction && !_configuration.OutgoingAttackTextEnabled)
+                //     || (isPetAction && !_configuration.PetAttackTextEnabled)
+                //     || (isHealingAction && !_configuration.HealAttackTextEnabled))
+                // {
+                //     text1 = "";
+                // }
             }
             catch (Exception e)
             {
-                PluginLog.Information($"{e.Message} {e.StackTrace}");
+                PluginLog.Error(e, $"An error occurred in Damage Info.");
             }
         }
 

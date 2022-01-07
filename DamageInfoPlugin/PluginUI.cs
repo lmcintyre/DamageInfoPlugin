@@ -62,13 +62,15 @@ namespace DamageInfoPlugin
 	            var colorConfigValue = configuration.ColorEnabled;
 	            var sourceTextConfigValue = configuration.SourceTextEnabled;
 	            var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
+	            var healSourceTextConfigValue = configuration.HealSourceTextEnabled;
 	            var incAttackTextConfigValue = configuration.IncomingAttackTextEnabled;
 	            var outAttackTextConfigValue = configuration.OutgoingAttackTextEnabled;
 	            var petAttackTextConfigValue = configuration.PetAttackTextEnabled;
+	            var healAttackTextConfigValue = configuration.HealAttackTextEnabled;
 	            
 	            // computed state
-	            var sourceTextAllConfigValue = sourceTextConfigValue && petSourceTextConfigValue;
-	            var attackTextAllConfigValue = incAttackTextConfigValue && outAttackTextConfigValue && petAttackTextConfigValue;
+	            var sourceTextAllConfigValue = sourceTextConfigValue && petSourceTextConfigValue && healSourceTextConfigValue;
+	            var attackTextAllConfigValue = incAttackTextConfigValue && outAttackTextConfigValue && petAttackTextConfigValue && healAttackTextConfigValue;
 
 	            if (ImGui.CollapsingHeader("Damage type information"))
 	            {
@@ -94,7 +96,7 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("Source Text");
 		            ImGui.NextColumn();
-		            ImGui.Text("Attack Text");
+		            ImGui.Text("Action Text");
 		            ImGui.NextColumn();
 		            ImGui.Text("All");
 		            ImGui.NextColumn();
@@ -108,6 +110,7 @@ namespace DamageInfoPlugin
 		            {
 			            configuration.SourceTextEnabled = sourceTextAllConfigValue;
 			            configuration.PetSourceTextEnabled = sourceTextAllConfigValue;
+			            configuration.HealSourceTextEnabled = sourceTextAllConfigValue;
 			            configuration.Save();
 		            }
 		            ImGui.NextColumn();
@@ -116,16 +119,12 @@ namespace DamageInfoPlugin
 			            configuration.IncomingAttackTextEnabled = attackTextAllConfigValue;
 			            configuration.OutgoingAttackTextEnabled = attackTextAllConfigValue;
 			            configuration.PetAttackTextEnabled = attackTextAllConfigValue;
+			            configuration.HealAttackTextEnabled = attackTextAllConfigValue;
 			            configuration.Save();
 		            }
 		            ImGui.NextColumn();
 		            ImGui.Text("Incoming Damage");
 		            ImGui.NextColumn();
-		            // if (ImGui.Checkbox("##incomingcolor", ref colorIncTextConfigValue))
-		            // {
-			            // configuration.IncomingColorEnabled = colorIncTextConfigValue;
-			            // configuration.Save();
-		            // }
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##incomingsource", ref sourceTextConfigValue))
 		            {
@@ -141,11 +140,6 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("Outgoing Damage");
 		            ImGui.NextColumn();
-		            // if (ImGui.Checkbox("##outgoingcolor", ref colorOutTextConfigValue))
-		            // {
-			            // configuration.OutgoingColorEnabled = colorOutTextConfigValue;
-			            // configuration.Save();
-		            // }
 		            ImGui.NextColumn();
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##outgoingattack", ref outAttackTextConfigValue))
@@ -156,11 +150,6 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("Pet");
 		            ImGui.NextColumn();
-		            // if (ImGui.Checkbox("##petcolor", ref petColorConfigValue))
-		            // {
-			            // configuration.PetDamageColorEnabled = petColorConfigValue;
-			            // configuration.Save();
-		            // }
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##petsourcetext", ref petSourceTextConfigValue))
 		            {
@@ -174,6 +163,32 @@ namespace DamageInfoPlugin
 			            configuration.Save();
 		            }
 		            ImGui.NextColumn();
+		            ImGui.Separator();
+		            ImGui.Columns(1, "beforesep");
+		            ImGui.Separator();
+		            ImGui.Columns(4, "aftersep");
+		            ImGui.Text("Heals");
+		            ImGui.NextColumn();
+		            ImGui.Text("Unsupported");
+		            if (ImGui.IsItemHovered())
+		            {
+			            ImGui.BeginTooltip();
+			            ImGui.SetTooltip("Coloring heals is useless.");
+			            ImGui.EndTooltip();
+		            }
+		            
+		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##healsourcetext", ref healSourceTextConfigValue))
+		            {
+			            configuration.HealSourceTextEnabled = healSourceTextConfigValue;
+			            configuration.Save();
+		            }
+		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##healattacktext", ref healAttackTextConfigValue))
+		            {
+			            configuration.HealAttackTextEnabled = healAttackTextConfigValue;
+			            configuration.Save();
+		            }
 		            ImGui.Columns(1, "FT Options");
 		            ImGui.Separator();
 		            
