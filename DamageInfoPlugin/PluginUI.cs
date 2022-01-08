@@ -1,6 +1,7 @@
 ﻿using ImGuiNET;
 using System;
 using System.Numerics;
+using Dalamud.Interface;
 
 namespace DamageInfoPlugin
 {
@@ -59,7 +60,8 @@ namespace DamageInfoPlugin
 	            var castBarConfigValue = configuration.MainTargetCastBarColorEnabled;
 	            var ftCastBarConfigValue = configuration.FocusTargetCastBarColorEnabled;
 	            var debugLogConfigValue = configuration.DebugLogEnabled;
-	            var colorConfigValue = configuration.ColorEnabled;
+	            var incomingColorConfigValue = configuration.IncomingColorEnabled;
+	            var outgoingColorConfigValue = configuration.OutgoingColorEnabled;
 	            var sourceTextConfigValue = configuration.SourceTextEnabled;
 	            var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
 	            var healSourceTextConfigValue = configuration.HealSourceTextEnabled;
@@ -69,6 +71,7 @@ namespace DamageInfoPlugin
 	            var healAttackTextConfigValue = configuration.HealAttackTextEnabled;
 	            
 	            // computed state
+	            var colorAllConfigValue = incomingColorConfigValue && outgoingColorConfigValue;
 	            var sourceTextAllConfigValue = sourceTextConfigValue && petSourceTextConfigValue && healSourceTextConfigValue;
 	            var attackTextAllConfigValue = incAttackTextConfigValue && outAttackTextConfigValue && petAttackTextConfigValue && healAttackTextConfigValue;
 
@@ -100,9 +103,10 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("All");
 		            ImGui.NextColumn();
-		            if (ImGui.Checkbox("##allcolor", ref colorConfigValue))
+		            if (ImGui.Checkbox("##allcolor", ref colorAllConfigValue))
 		            {
-			            configuration.ColorEnabled = colorConfigValue;
+			            configuration.IncomingColorEnabled = colorAllConfigValue;
+			            configuration.OutgoingColorEnabled = colorAllConfigValue;
 			            configuration.Save();
 		            }
 		            ImGui.NextColumn();
@@ -125,6 +129,11 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("Incoming Damage");
 		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##incomingcolor", ref incomingColorConfigValue))
+		            {
+			            configuration.IncomingColorEnabled = incomingColorConfigValue;
+			            configuration.Save();
+		            }
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##incomingsource", ref sourceTextConfigValue))
 		            {
@@ -140,6 +149,11 @@ namespace DamageInfoPlugin
 		            ImGui.NextColumn();
 		            ImGui.Text("Outgoing Damage");
 		            ImGui.NextColumn();
+		            if (ImGui.Checkbox("##outgoingcolor", ref outgoingColorConfigValue))
+		            {
+			            configuration.OutgoingColorEnabled = outgoingColorConfigValue;
+			            configuration.Save();
+		            }
 		            ImGui.NextColumn();
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##outgoingattack", ref outAttackTextConfigValue))
@@ -163,20 +177,8 @@ namespace DamageInfoPlugin
 			            configuration.Save();
 		            }
 		            ImGui.NextColumn();
-		            ImGui.Separator();
-		            ImGui.Columns(1, "beforesep");
-		            ImGui.Separator();
-		            ImGui.Columns(4, "aftersep");
 		            ImGui.Text("Heals");
 		            ImGui.NextColumn();
-		            ImGui.Text("Unsupported");
-		            if (ImGui.IsItemHovered())
-		            {
-			            ImGui.BeginTooltip();
-			            ImGui.SetTooltip("Coloring heals is useless.");
-			            ImGui.EndTooltip();
-		            }
-		            
 		            ImGui.NextColumn();
 		            if (ImGui.Checkbox("##healsourcetext", ref healSourceTextConfigValue))
 		            {

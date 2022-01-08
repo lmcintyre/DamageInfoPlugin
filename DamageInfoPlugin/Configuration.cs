@@ -46,10 +46,13 @@ namespace DamageInfoPlugin
 
         public bool DebugLogEnabled { get; set; } = false;
         
-        public bool ColorEnabled { get; set; }
+        public bool IncomingColorEnabled { get; set; }
+        public bool OutgoingColorEnabled { get; set; }
+        
         public bool SourceTextEnabled { get; set; }
         public bool PetSourceTextEnabled { get; set; }
         public bool HealSourceTextEnabled { get; set; }
+        
         public bool IncomingAttackTextEnabled { get; set; }
         public bool OutgoingAttackTextEnabled { get; set; }
         public bool PetAttackTextEnabled { get; set; }

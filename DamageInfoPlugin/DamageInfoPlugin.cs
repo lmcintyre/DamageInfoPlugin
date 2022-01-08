@@ -65,8 +65,8 @@ namespace DamageInfoPlugin
         private readonly Hook<SetCastBarDelegate> _setCastBarHook;
         private readonly Hook<SetCastBarDelegate> _setFocusTargetCastBarHook;
 
-        private delegate IntPtr WriteFlyTextDataDelegate(IntPtr a1, NumberArrayData* numberArray, uint numberArrayIndex, IntPtr a4, int a5, int* ftData, uint a7, uint a8);
-        private readonly Hook<WriteFlyTextDataDelegate> _writeFlyTextHook;
+        // private delegate IntPtr WriteFlyTextDataDelegate(IntPtr a1, NumberArrayData* numberArray, uint numberArrayIndex, IntPtr a4, int a5, int* ftData, uint a7, uint a8);
+        // private readonly Hook<WriteFlyTextDataDelegate> _writeFlyTextHook;
 
         private readonly Dictionary<uint, DamageType> _actionToDamageTypeDict;
         private readonly HashSet<uint> _healingActions;
@@ -128,9 +128,11 @@ namespace DamageInfoPlugin
                     if (row.Unknown4 == 2)
                         _healingActions.Add(row.RowId);
                 }
+
+                _healingActions.Add(3571); //Assize
                 
-                var writeFtPtr = scanner.ScanText("E8 ?? ?? ?? ?? 83 F8 01 75 45");
-                _writeFlyTextHook = new Hook<WriteFlyTextDataDelegate>(writeFtPtr, (WriteFlyTextDataDelegate) WriteFlyTextDataDetour);
+                // var writeFtPtr = scanner.ScanText("E8 ?? ?? ?? ?? 83 F8 01 75 45");
+                // _writeFlyTextHook = new Hook<WriteFlyTextDataDelegate>(writeFtPtr, (WriteFlyTextDataDelegate) WriteFlyTextDataDetour);
 
                 var addScreenLogPtr = scanner.ScanText("E8 ?? ?? ?? ?? BB ?? ?? ?? ?? EB 37");
                 _addScreenLogHook = new Hook<AddScreenLogDelegate>(addScreenLogPtr, (AddScreenLogDelegate) AddScreenLogDetour);
@@ -148,8 +150,8 @@ namespace DamageInfoPlugin
                 PluginLog.Information($"Encountered an error loading DamageInfoPlugin: {ex.Message}");
                 PluginLog.Information("Plugin will not be loaded.");
                 
-                _writeFlyTextHook?.Disable();
-                _writeFlyTextHook?.Dispose();
+                // _writeFlyTextHook?.Disable();
+                // _writeFlyTextHook?.Dispose();
                 _addScreenLogHook?.Disable();
                 _addScreenLogHook?.Dispose();
                 _setCastBarHook?.Disable();
@@ -161,7 +163,7 @@ namespace DamageInfoPlugin
                 throw;
             }
 
-            _writeFlyTextHook.Enable();
+            // _writeFlyTextHook.Enable();
             _addScreenLogHook.Enable();
             _setCastBarHook.Enable();
             _setFocusTargetCastBarHook.Enable();
@@ -174,8 +176,8 @@ namespace DamageInfoPlugin
         {
             ResetMainTargetCastBar();
             ResetFocusTargetCastBar();
-            _writeFlyTextHook?.Disable();
-            _writeFlyTextHook?.Dispose();
+            // _writeFlyTextHook?.Disable();
+            // _writeFlyTextHook?.Dispose();
             _addScreenLogHook?.Disable();
             _addScreenLogHook?.Dispose();
             _setCastBarHook?.Disable();
@@ -487,44 +489,39 @@ namespace DamageInfoPlugin
             }
         }
 
-        private IntPtr WriteFlyTextDataDetour(IntPtr a1, NumberArrayData* numberArray, uint numberArrayIndex, IntPtr a4, int a5, int* ftData, uint a7, uint a8)
-        {
-            var result = _writeFlyTextHook.Original(a1, numberArray, numberArrayIndex, a4, a5, ftData, a7, a8);
-
-            if (numberArray == null || ftData == null || !_configuration.ColorEnabled) return result;
-
-            // People don't like their heals to be colored so fail fast...
-            if ((uint) numberArray->IntArray[numberArrayIndex + 5] == 0xFF005D2A) return result;
-            
-            // for (int i = 0; i < 5; i++)
-                // DebugLog(LogType.FlyTextWrite, $"ftData[{i}]: {ftData[i]}");
-            
-            try
-            {
-                var ftKind = (FlyTextKind) ftData[0];
-                if (!IsColorableFlyText(ftKind)) return result;
-                
-                var actionId = (uint) ftData[2];
-                if (actionId == 0 || !_actionToDamageTypeDict.TryGetValue(actionId, out var dmgType)) return result;
-                
-                var color = 0;
-                color = dmgType switch
-                {
-                    DamageType.Physical => (int)ImGui.GetColorU32(_configuration.PhysicalColor),
-                    DamageType.Magic => (int)ImGui.GetColorU32(_configuration.MagicColor),
-                    DamageType.Darkness => (int)ImGui.GetColorU32(_configuration.DarknessColor),
-                    _ => color
-                };
-                var color2 = (uint) numberArray->IntArray[numberArrayIndex + 5];
-                DebugLog(LogType.FlyTextWrite, $"color was {color2} {color2:X}");
-                numberArray->IntArray[numberArrayIndex + 5] = color;
-            }
-            catch (Exception e)
-            {
-                PluginLog.Error(e, "An error occurred in Damage Info.");
-            }
-            return result;
-        }
+        // RIP doing this the proper way. You will be missed.
+        // private IntPtr WriteFlyTextDataDetour(IntPtr a1, NumberArrayData* numberArray, uint numberArrayIndex, IntPtr a4, int a5, int* ftData, uint a7, uint a8)
+        // {
+        //     var result = _writeFlyTextHook.Original(a1, numberArray, numberArrayIndex, a4, a5, ftData, a7, a8);
+        //
+        //     if (numberArray == null || ftData == null || !_configuration.ColorEnabled) return result;
+        //
+        //     // People don't like their heals to be colored so fail fast...
+        //     if ((uint) numberArray->IntArray[numberArrayIndex + 5] == 0xFF005D2A) return result;
+        //     
+        //     // for (int i = 0; i < 5; i++)
+        //         // DebugLog(LogType.FlyTextWrite, $"ftData[{i}]: {ftData[i]}");
+        //     
+        //     try
+        //     {
+        //         var ftKind = (FlyTextKind) ftData[0];
+        //         if (!IsEligibleFlyText(ftKind)) return result;
+        //         
+        //         var actionId = (uint) ftData[2];
+        //         if (actionId == 0 || !_actionToDamageTypeDict.TryGetValue(actionId, out var dmgType)) return result;
+        //         
+        //         var color = 0;
+        //         var originalColor = (uint) numberArray->IntArray[numberArrayIndex + 5];
+        //         color = GetDamageColor(dmgType, originalColor);
+        //         DebugLog(LogType.FlyTextWrite, $"color was {originalColor} {originalColor:X}");
+        //         numberArray->IntArray[numberArrayIndex + 5] = color;
+        //     }
+        //     catch (Exception e)
+        //     {
+        //         PluginLog.Error(e, "An error occurred in Damage Info.");
+        //     }
+        //     return result;
+        // }
 
         private void OnFlyTextCreated(
             ref FlyTextKind kind,
@@ -537,6 +534,9 @@ namespace DamageInfoPlugin
             ref float yOffset,
             ref bool handled)
         {
+            if (!IsEligibleFlyText(kind))
+                return;
+            
             try
             {
                 if (_configuration.DebugLogEnabled)
@@ -566,6 +566,15 @@ namespace DamageInfoPlugin
                 var isCharaAction = action.sourceId == charaId;
                 var isCharaTarget = action.targetId == charaId;
 
+                if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled) && _actionToDamageTypeDict.TryGetValue(action.actionId, out var dmgType))
+                {
+                    var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
+                    var outgoingCheck = isCharaAction && !isCharaTarget && _configuration.OutgoingColorEnabled;
+
+                    if (incomingCheck || outgoingCheck)
+                        color = GetDamageColor(dmgType);
+                }
+
                 if (_configuration.SourceTextEnabled || _configuration.PetSourceTextEnabled || _configuration.HealSourceTextEnabled)
                 {
                     var tgtCheck = !isCharaAction && !isHealingAction && !isPetAction && _configuration.SourceTextEnabled;
@@ -587,7 +596,7 @@ namespace DamageInfoPlugin
                     var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && !isPetAction && !_configuration.IncomingAttackTextEnabled;
                     var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && !isPetAction && !_configuration.OutgoingAttackTextEnabled;
                     var petCheck = !isCharaAction && !isHealingAction && !isPetAction && !isCharaTarget && !_configuration.PetAttackTextEnabled;
-                    var healCheck = isHealingAction && !isPetAction && _configuration.HealAttackTextEnabled;
+                    var healCheck = isHealingAction && !isPetAction && !_configuration.HealAttackTextEnabled;
 
                     if (incomingCheck || outgoingCheck || petCheck || healCheck)
                         text1 = "";
@@ -649,6 +658,17 @@ namespace DamageInfoPlugin
             return new SeString(newPayloads);
         }
 
+        private uint GetDamageColor(DamageType type, uint fallback = 0xFF00008A)
+        {
+            return type switch
+            {
+                DamageType.Physical => ImGui.GetColorU32(_configuration.PhysicalColor),
+                DamageType.Magic => ImGui.GetColorU32(_configuration.MagicColor),
+                DamageType.Darkness => ImGui.GetColorU32(_configuration.DarknessColor),
+                _ => fallback
+            };
+        }
+
         private SeString GetName(uint id)
         {
             return _objectTable.SearchById(id)?.Name ?? SeString.Empty;
@@ -660,7 +680,7 @@ namespace DamageInfoPlugin
                 PluginLog.Information($"[{type}] {str}");
         }
 
-        private bool IsColorableFlyText(FlyTextKind kind)
+        private bool IsEligibleFlyText(FlyTextKind kind)
         {
             return kind is FlyTextKind.AutoAttack
                 or FlyTextKind.DirectHit
