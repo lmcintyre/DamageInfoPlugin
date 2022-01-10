@@ -12,10 +12,12 @@ public class ActionEffectStore
     private ulong CleanupInterval = 30000;
     
     private ConcurrentDictionary<uint, List<ActionEffectInfo>> _store;
+    private Configuration _config;
     private ulong _lastCleanup;
     
-    public ActionEffectStore()
+    public ActionEffectStore(Configuration config)
     {
+        _config = config;
         _store = new();
         _lastCleanup = GetTick();
     }
@@ -32,8 +34,7 @@ public class ActionEffectStore
         var tick = GetTick();
         if (tick - _lastCleanup < CleanupInterval) return;
 
-        // FlyTextLog($"pre-cleanup flytext: {futureFlyText.Values.Count}");
-        // FlyTextLog($"pre-cleanup text: {text.Count}");
+        StoreLog($"pre-cleanup: {_store.Values.Count}");
         _lastCleanup = tick;
 
         var toRemove = new List<uint>();
@@ -62,8 +63,7 @@ public class ActionEffectStore
         foreach (uint key in toRemove)
             _store.TryRemove(key, out var unused);
             
-        // FlyTextLog($"post-cleanup flytext: {futureFlyText.Values.Count}");
-        // FlyTextLog($"post-cleanup text: {text.Count}");
+        StoreLog($"post-cleanup: {_store.Values.Count}");
     }
 
     public void Dispose()
@@ -91,7 +91,7 @@ public class ActionEffectStore
 
     public void UpdateEffect(uint actionId, uint sourceId, uint targetId, uint value, FlyTextKind logKind)
     {
-        StoreLog($"Updating effect {actionId} {sourceId} {targetId} {value} with {logKind}");
+        StoreLog($"Updating effect {actionId} {sourceId} {targetId} {value} with {logKind}...");
         if (!_store.TryGetValue(value, out var list))
             return;
 
@@ -108,13 +108,14 @@ public class ActionEffectStore
         StoreLog($"Updated effect {effect}");
     }
 
-    public bool TryGetEffect(uint value, FlyTextKind ftKind, out ActionEffectInfo info)
+    public bool TryGetEffect(uint value, FlyTextKind targetKind, uint charaId, List<uint> petIds, out ActionEffectInfo info)
     {
+        StoreLog($"Looking for effect {value} {targetKind}...");
         info = default;
         if (!_store.TryGetValue(value, out var list))
             return false;
         
-        var effect = list.FirstOrDefault(x => x.value == value && x.kind == ftKind);
+        var effect = list.FirstOrDefault(x => x.value == value && KindCheck(x, targetKind) && TargetCheck(x, charaId, petIds));
 
         if (!list.Remove(effect))
             return false;
@@ -124,8 +125,23 @@ public class ActionEffectStore
         return true;
     }
 
+    private bool KindCheck(ActionEffectInfo info, FlyTextKind targetKind)
+    {
+        var result = targetKind == info.kind;
+        // Screenlog will log misses from enemies as Named/Miss, but they will show up to us as Named/Dodge
+        if (!result)
+            return targetKind is FlyTextKind.NamedDodge or FlyTextKind.Dodge && info.kind is FlyTextKind.NamedMiss or FlyTextKind.Miss;
+        return true;
+    }
+    
+    private bool TargetCheck(ActionEffectInfo info, uint charaId, List<uint> petIds)
+    {
+        return info.sourceId == charaId || info.targetId == charaId || petIds.Contains(info.sourceId);
+    }
+
     private void StoreLog(string msg)
     {
-        PluginLog.Debug($"[Store] {msg}");
+        if (_config.DebugLogEnabled)
+            PluginLog.Debug($"[Store] {msg}");
     }
 }
