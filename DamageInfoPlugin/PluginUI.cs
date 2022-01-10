@@ -58,8 +58,7 @@ namespace DamageInfoPlugin
 	            var bgDark = configuration.DarknessBgColor;
 	            var castBarConfigValue = configuration.MainTargetCastBarColorEnabled;
 	            var ftCastBarConfigValue = configuration.FocusTargetCastBarColorEnabled;
-	            var effectLogConfigValue = configuration.EffectLogEnabled;
-	            var flytextLogConfigValue = configuration.FlyTextLogEnabled;
+	            var debugLogConfigValue = configuration.DebugLogEnabled;
 	            var colorIncTextConfigValue = configuration.IncomingColorEnabled;
 	            var colorOutTextConfigValue = configuration.OutgoingColorEnabled;
 	            var petColorConfigValue = configuration.PetDamageColorEnabled;
@@ -238,15 +237,9 @@ namespace DamageInfoPlugin
 	            
 	            if (ImGui.CollapsingHeader("Debug"))
 	            {
-		            if (ImGui.Checkbox("EffectLog Enabled", ref effectLogConfigValue))
+		            if (ImGui.Checkbox("Debug Log Enabled", ref debugLogConfigValue))
 		            {
-			            configuration.EffectLogEnabled = effectLogConfigValue;
-			            configuration.Save();
-		            }
-
-		            if (ImGui.Checkbox("FlyTextLog Enabled", ref flytextLogConfigValue))
-		            {
-			            configuration.FlyTextLogEnabled = flytextLogConfigValue;
+			            configuration.DebugLogEnabled = debugLogConfigValue;
 			            configuration.Save();
 		            }
 	            }

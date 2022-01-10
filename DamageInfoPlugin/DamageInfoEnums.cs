@@ -38,4 +38,12 @@
         Physical = 7,
         LimitBreak = 8,
     }
+    
+    public enum LogType
+    {
+        FlyText,
+        ScreenLog,
+        Effect,
+        FlyTextWrite
+    }
 }

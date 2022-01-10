@@ -19,6 +19,7 @@ using Dalamud.IoC;
 using Dalamud.Logging;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
+using static DamageInfoPlugin.LogType;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 
 namespace DamageInfoPlugin
@@ -41,30 +42,32 @@ namespace DamageInfoPlugin
 
         private const string CommandName = "/dmginfo";
 
-        private Configuration configuration;
-        private PluginUI ui;
+        private readonly Configuration _configuration;
+        private readonly PluginUI _ui;
 
-        private GameGui gameGui;
-        private DalamudPluginInterface pi;
-        private CommandManager cmdMgr;
-        private FlyTextGui ftGui;
-        private ObjectTable objectTable;
-        private ClientState clientState;
-        private TargetManager targetManager;
+        private readonly GameGui _gameGui;
+        private readonly DalamudPluginInterface _pi;
+        private readonly CommandManager _cmdMgr;
+        private readonly FlyTextGui _ftGui;
+        private readonly ObjectTable _objectTable;
+        private readonly ClientState _clientState;
+        private readonly TargetManager _targetManager;
 
-        private Hook<ReceiveActionEffectDelegate> receiveActionEffectHook;
+        private delegate void ReceiveActionEffectDelegate(uint sourceId, IntPtr sourceCharacter, IntPtr pos, IntPtr effectHeader, IntPtr effectArray, IntPtr effectTrail);
+        private readonly Hook<ReceiveActionEffectDelegate> _receiveActionEffectHook;
         
-        private Hook<SetCastBarDelegate> setCastBarHook;
-        private Hook<SetCastBarDelegate> setFocusTargetCastBarHook;
+        private delegate void SetCastBarDelegate(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5);
+        private readonly Hook<SetCastBarDelegate> _setCastBarHook;
+        private readonly Hook<SetCastBarDelegate> _setFocusTargetCastBarHook;
 
-        private CastbarInfo _nullCastbarInfo;
-        private Dictionary<uint, DamageType> actionToDamageTypeDict;
+        private readonly CastbarInfo _nullCastbarInfo;
+        private Dictionary<uint, DamageType> _actionToDamageTypeDict;
 
-        private HashSet<uint> ignoredCastActions;
+        private readonly HashSet<uint> _ignoredCastActions;
 
-        private ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>> futureFlyText;
+        private ConcurrentDictionary<uint, List<Tuple<long, DamageType, uint>>> _futureFlyText;
 
-        private long lastCleanup;
+        private long _lastCleanup;
 
         public DamageInfoPlugin(
             [RequiredVersion("1.0")] GameGui gameGui,
@@ -77,54 +80,51 @@ namespace DamageInfoPlugin
             [RequiredVersion("1.0")] TargetManager targetManager,
             [RequiredVersion("1.0")] SigScanner scanner)
         {
-            this.gameGui = gameGui;
-            this.ftGui = ftGui;
-            this.pi = pi;
-            this.cmdMgr = cmdMgr;
-            this.objectTable = objectTable;
-            this.clientState = clientState;
-            this.targetManager = targetManager;
+            _gameGui = gameGui;
+            _ftGui = ftGui;
+            _pi = pi;
+            _cmdMgr = cmdMgr;
+            _objectTable = objectTable;
+            _clientState = clientState;
+            _targetManager = targetManager;
             
-            lastCleanup = Ms();
-            actionToDamageTypeDict = new Dictionary<uint, DamageType>();
-            futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType, int>>>();
-            ignoredCastActions = new HashSet<uint>();
+            _lastCleanup = Ms();
+            _actionToDamageTypeDict = new Dictionary<uint, DamageType>();
+            _futureFlyText = new ConcurrentDictionary<uint, List<Tuple<long, DamageType, uint>>>();
+            _ignoredCastActions = new HashSet<uint>();
 
-            configuration = pi.GetPluginConfig() as Configuration ?? new Configuration();
-            configuration.Initialize(pi, this);
-            ui = new PluginUI(configuration, this);
+            _configuration = pi.GetPluginConfig() as Configuration ?? new Configuration();
+            _configuration.Initialize(pi, this);
+            _ui = new PluginUI(_configuration, this);
 
             cmdMgr.AddHandler(CommandName, new CommandInfo(OnCommand)
                 {HelpMessage = "Display the Damage Info configuration interface."});
 
             _nullCastbarInfo = new CastbarInfo {unitBase = null, gauge = null, bg = null};
-            
-            var actionSheet = dataMgr.GetExcelSheet<Action>();
-            foreach (var row in actionSheet)
-            {
-                DamageType tmpType = (DamageType) row.AttackType.Row;
-                if (tmpType != DamageType.Magic && tmpType != DamageType.Darkness && tmpType != DamageType.Unknown)
-                    tmpType = DamageType.Physical;
-
-                actionToDamageTypeDict.Add(row.RowId, tmpType);
-                
-                if (row.ActionCategory.Row > 4 && row.ActionCategory.Row < 11)
-                    ignoredCastActions.Add(row.ActionCategory.Row);
-            }
 
             try
             {
-                IntPtr receiveActionEffectFuncPtr =
-                    scanner.ScanText("4C 89 44 24 18 53 56 57 41 54 41 57 48 81 EC ?? 00 00 00 8B F9");
-                receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr,
-                    (ReceiveActionEffectDelegate) ReceiveActionEffect);
+                var actionSheet = dataMgr.GetExcelSheet<Action>();
+                foreach (var row in actionSheet)
+                {
+                    DamageType tmpType = (DamageType) row.AttackType.Row;
+                    if (tmpType != DamageType.Magic && tmpType != DamageType.Darkness && tmpType != DamageType.Unknown)
+                        tmpType = DamageType.Physical;
 
-                IntPtr setCastBarFuncPtr = scanner.ScanText(
-                    "48 89 5C 24 ?? 48 89 6C 24 ?? 56 48 83 EC 20 80 7C 24 ?? ?? 49 8B D9 49 8B E8 48 8B F2 74 22 49 8B 09 66 41 C7 41 ?? ?? ?? E8 ?? ?? ?? ?? 66 83 F8 69 75 0D 48 8B 0B BA ?? ?? ?? ?? E8 ?? ?? ?? ??");
-                setCastBarHook = new Hook<SetCastBarDelegate>(setCastBarFuncPtr, (SetCastBarDelegate) SetCastBarDetour);
+                    _actionToDamageTypeDict.Add(row.RowId, tmpType);
                 
-                IntPtr setFocusTargetCastBarFuncPtr = scanner.ScanText("48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 41 0F B6 F9 49 8B E8 48 8B F2 48 8B D9");
-                setFocusTargetCastBarHook = new Hook<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, (SetCastBarDelegate) SetFocusTargetCastBarDetour);
+                    if (row.ActionCategory.Row > 4 && row.ActionCategory.Row < 11)
+                        _ignoredCastActions.Add(row.ActionCategory.Row);
+                }
+                
+                var receiveActionEffectFuncPtr = scanner.ScanText("4C 89 44 24 ?? 53 56 57 41 54 41 57");
+                _receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, (ReceiveActionEffectDelegate) ReceiveActionEffect);
+
+                var setCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 4C 8D 8F ?? ?? ?? ?? 4D 8B C6");
+                _setCastBarHook = new Hook<SetCastBarDelegate>(setCastBarFuncPtr, (SetCastBarDelegate) SetCastBarDetour);
+                
+                var setFocusTargetCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 49 8B 47 20 4C 8B 6C 24");
+                _setFocusTargetCastBarHook = new Hook<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, (SetCastBarDelegate) SetFocusTargetCastBarDetour);
 
                 ftGui.FlyTextCreated += OnFlyTextCreated;
             }
@@ -133,20 +133,20 @@ namespace DamageInfoPlugin
                 PluginLog.Information($"Encountered an error loading DamageInfoPlugin: {ex.Message}");
                 PluginLog.Information("Plugin will not be loaded.");
 
-                receiveActionEffectHook?.Disable();
-                receiveActionEffectHook?.Dispose();
-                setCastBarHook?.Disable();
-                setCastBarHook?.Dispose();
-                setFocusTargetCastBarHook?.Disable();
-                setFocusTargetCastBarHook?.Dispose();
+                _receiveActionEffectHook?.Disable();
+                _receiveActionEffectHook?.Dispose();
+                _setCastBarHook?.Disable();
+                _setCastBarHook?.Dispose();
+                _setFocusTargetCastBarHook?.Disable();
+                _setFocusTargetCastBarHook?.Dispose();
                 cmdMgr.RemoveHandler(CommandName);
 
                 throw;
             }
 
-            receiveActionEffectHook.Enable();
-            setCastBarHook.Enable();
-            setFocusTargetCastBarHook.Enable();
+            _receiveActionEffectHook.Enable();
+            _setCastBarHook.Enable();
+            _setFocusTargetCastBarHook.Enable();
 
             pi.UiBuilder.Draw += DrawUI;
             pi.UiBuilder.OpenConfigUi += DrawConfigUI;
@@ -157,41 +157,41 @@ namespace DamageInfoPlugin
             ClearFlyTextQueue();
             ResetMainTargetCastBar();
             ResetFocusTargetCastBar();
-            receiveActionEffectHook?.Disable();
-            receiveActionEffectHook?.Dispose();
-            setCastBarHook?.Disable();
-            setCastBarHook?.Dispose();
-            setFocusTargetCastBarHook?.Disable();
-            setFocusTargetCastBarHook?.Dispose();
+            _receiveActionEffectHook?.Disable();
+            _receiveActionEffectHook?.Dispose();
+            _setCastBarHook?.Disable();
+            _setCastBarHook?.Dispose();
+            _setFocusTargetCastBarHook?.Disable();
+            _setFocusTargetCastBarHook?.Dispose();
             
-            ftGui.FlyTextCreated -= OnFlyTextCreated;
+            _ftGui.FlyTextCreated -= OnFlyTextCreated;
 
-            futureFlyText = null;
-            actionToDamageTypeDict = null;
+            _futureFlyText = null;
+            _actionToDamageTypeDict = null;
 
-            ui.Dispose();
-            cmdMgr.RemoveHandler(CommandName);
-            pi.Dispose();
+            _ui.Dispose();
+            _cmdMgr.RemoveHandler(CommandName);
+            _pi.Dispose();
         }
 
         private void OnCommand(string command, string args)
         {
-            ui.SettingsVisible = true;
+            _ui.SettingsVisible = true;
         }
 
         private void DrawUI()
         {
-            ui.Draw();
+            _ui.Draw();
         }
 
         private void DrawConfigUI()
         {
-            ui.SettingsVisible = true;
+            _ui.SettingsVisible = true;
         }
         
         private CastbarInfo GetTargetInfoUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*) gameGui.GetAddonByName("_TargetInfo", 1).ToPointer();
+            AtkUnitBase* unitbase = (AtkUnitBase*) _gameGui.GetAddonByName("_TargetInfo", 1).ToPointer();
 
             if (unitbase == null) return _nullCastbarInfo;
             
@@ -205,7 +205,7 @@ namespace DamageInfoPlugin
 
         private CastbarInfo GetTargetInfoSplitUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*) gameGui.GetAddonByName("_TargetInfoCastBar", 1).ToPointer();
+            AtkUnitBase* unitbase = (AtkUnitBase*) _gameGui.GetAddonByName("_TargetInfoCastBar", 1).ToPointer();
             
             if (unitbase == null) return _nullCastbarInfo;
             
@@ -219,7 +219,7 @@ namespace DamageInfoPlugin
         
         private CastbarInfo GetFocusTargetUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*) gameGui.GetAddonByName("_FocusTargetInfo", 1).ToPointer();
+            AtkUnitBase* unitbase = (AtkUnitBase*) _gameGui.GetAddonByName("_FocusTargetInfo", 1).ToPointer();
             
             if (unitbase == null) return _nullCastbarInfo;
             
@@ -234,7 +234,7 @@ namespace DamageInfoPlugin
         private uint FindCharaPet()
         {
             var charaId = GetCharacterActorId();
-            foreach (var obj in objectTable)
+            foreach (var obj in _objectTable)
             {
                 if (obj is not BattleNpc npc) continue;
 
@@ -250,16 +250,12 @@ namespace DamageInfoPlugin
 
         private uint GetCharacterActorId()
         {
-            return clientState.LocalPlayer.ObjectId;
+            return _clientState.LocalPlayer.ObjectId;
         }
 
-        private SeString GetActorName(int id)
+        private SeString GetActorName(uint id)
         {
-            foreach (var obj in objectTable)
-                if (obj != null)
-                    if (id == obj.ObjectId)
-                        return obj.Name;
-            return "";
+            return _objectTable.SearchById(id)?.Name ?? SeString.Empty;
         }
 
         public void ResetMainTargetCastBar()
@@ -311,14 +307,12 @@ namespace DamageInfoPlugin
                 ftInfo.bg->AtkResNode.Color.A = 0xFF;
             }
         }
-
-        private delegate void SetCastBarDelegate(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5);
-
+        
         private void SetCastBarDetour(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
         {
-            if (!configuration.MainTargetCastBarColorEnabled)
+            if (!_configuration.MainTargetCastBarColorEnabled)
             {
-                setCastBarHook.Original(thisPtr, a2, a3, a4, a5);
+                _setCastBarHook.Original(thisPtr, a2, a3, a4, a5);
                 return;
             }
 
@@ -330,27 +324,27 @@ namespace DamageInfoPlugin
             
             if (combinedInvalid && splitInvalid)
             {
-                setCastBarHook.Original(thisPtr, a2, a3, a4, a5);
+                _setCastBarHook.Original(thisPtr, a2, a3, a4, a5);
                 return;
             }
 
             if (thisPtr.ToPointer() == targetInfo.unitBase && !combinedInvalid)
             {
-                var mainTarget = targetManager.Target;
-                ColorCastBar(mainTarget, targetInfo, setCastBarHook, thisPtr, a2, a3, a4, a5);
+                var mainTarget = _targetManager.Target;
+                ColorCastBar(mainTarget, targetInfo, _setCastBarHook, thisPtr, a2, a3, a4, a5);
             }
             else if (thisPtr.ToPointer() == splitInfo.unitBase && !splitInvalid)
             {
-                var mainTarget = targetManager.Target;
-                ColorCastBar(mainTarget, splitInfo, setCastBarHook, thisPtr, a2, a3, a4, a5);
+                var mainTarget = _targetManager.Target;
+                ColorCastBar(mainTarget, splitInfo, _setCastBarHook, thisPtr, a2, a3, a4, a5);
             }
         }
 
         private void SetFocusTargetCastBarDetour(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
         {
-            if (!configuration.FocusTargetCastBarColorEnabled)
+            if (!_configuration.FocusTargetCastBarColorEnabled)
             {
-                setFocusTargetCastBarHook.Original(thisPtr, a2, a3, a4, a5);
+                _setFocusTargetCastBarHook.Original(thisPtr, a2, a3, a4, a5);
                 return;
             }
             
@@ -360,8 +354,8 @@ namespace DamageInfoPlugin
             
             if (thisPtr.ToPointer() == ftInfo.unitBase && !focusTargetInvalid)
             {
-                GameObject focusTarget = targetManager.FocusTarget;
-                ColorCastBar(focusTarget, ftInfo, setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
+                GameObject focusTarget = _targetManager.FocusTarget;
+                ColorCastBar(focusTarget, ftInfo, _setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
             }
         }
         
@@ -376,8 +370,8 @@ namespace DamageInfoPlugin
 
             var actionId = battleTarget.CastActionId;
             
-            actionToDamageTypeDict.TryGetValue(actionId, out DamageType type);
-            if (ignoredCastActions.Contains(actionId))
+            _actionToDamageTypeDict.TryGetValue(actionId, out DamageType type);
+            if (_ignoredCastActions.Contains(actionId))
             {
                 info.gauge->AtkResNode.Color.R = 0xFF;
                 info.gauge->AtkResNode.Color.G = 0xFF;
@@ -395,17 +389,17 @@ namespace DamageInfoPlugin
             
             var castColor = type switch
             {
-                DamageType.Physical => configuration.PhysicalCastColor,
-                DamageType.Magic => configuration.MagicCastColor,
-                DamageType.Darkness => configuration.DarknessCastColor,
+                DamageType.Physical => _configuration.PhysicalCastColor,
+                DamageType.Magic => _configuration.MagicCastColor,
+                DamageType.Darkness => _configuration.DarknessCastColor,
                 _ => Vector4.One
             };
                     
             var bgColor = type switch
             {
-                DamageType.Physical => configuration.PhysicalBgColor,
-                DamageType.Magic => configuration.MagicBgColor,
-                DamageType.Darkness => configuration.DarknessBgColor,
+                DamageType.Physical => _configuration.PhysicalBgColor,
+                DamageType.Magic => _configuration.MagicBgColor,
+                DamageType.Darkness => _configuration.DarknessBgColor,
                 _ => Vector4.One
             };
             
@@ -422,6 +416,54 @@ namespace DamageInfoPlugin
             hook.Original(thisPtr, a2, a3, a4, a5);
         }
 
+        private void AddScreenLogDetour(
+            FFXIVClientStructs.FFXIV.Client.Game.Character.Character* target,
+            FFXIVClientStructs.FFXIV.Client.Game.Character.Character* source,
+            FlyTextKind logKind,
+            int option,
+            int actionKind,
+            int actionId,
+            int val1,
+            int val2,
+            int val3,
+            int val4)
+        {
+            try
+            {
+                var targetId = target->GameObject.ObjectID;
+                var sourceId = source->GameObject.ObjectID;
+            
+                if (_configuration.DebugLogEnabled)
+                {
+                    DebugLog(LogType.ScreenLog, $"{option} {actionKind} {actionId}");
+                    DebugLog(LogType.ScreenLog, $"{val1} {val2} {val3} {val4}");
+                    var targetName = GetActorName(targetId);
+                    var sourceName  = GetActorName(sourceId);
+                    DebugLog(LogType.ScreenLog, $"src {sourceId} {sourceName}");
+                    DebugLog(LogType.ScreenLog, $"tgt {targetId} {targetName}");    
+                }
+            
+                var action = new ActionEffectInfo
+                {
+                    actionId = (uint) actionId,
+                    kind = logKind,
+                    sourceId = sourceId,
+                    targetId = targetId,
+                    value = val1,
+                };
+
+                // _actions.Add(action);
+                // DebugLog(LogType.ScreenLog, $"added action: {action}");
+                // DebugLog(LogType.ScreenLog, $"_actions size: {_actions.Count}");
+                //
+                // _addScreenLogHook.Original(target, source, logKind, option, actionKind, actionId, val1, val2, val3, val4);
+            }
+            catch (Exception e)
+            {
+                PluginLog.Error(e, "An error occurred in Damage Info.");
+            }
+        }
+        
         private void OnFlyTextCreated(
             ref FlyTextKind kind,
             ref int val1,
@@ -438,27 +480,27 @@ namespace DamageInfoPlugin
                 FlyTextKind ftKind = kind;
 
                 // wrap this here to lower overhead when not logging
-                if (configuration.FlyTextLogEnabled)
+                if (_configuration.DebugLogEnabled)
                 {
                     var str1 = text1?.TextValue?.Replace("%", "%%");
                     var str2 = text2?.TextValue?.Replace("%", "%%");
 
-                    FlyTextLog($"flytext created: kind: {ftKind} ({(int)kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
-                    FlyTextLog($"text1: {str1} | text2: {str2}");
+                    DebugLog(FlyText, $"flytext created: kind: {ftKind} ({(int)kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
+                    DebugLog(FlyText, $"text1: {str1} | text2: {str2}");
                 }
 
-                if (TryGetFlyTextDamageType((uint)val1, out var dmgType, out int sourceId))
+                if (TryGetFlyTextDamageType((uint)val1, out var dmgType, out uint sourceId))
                 {
                     var charaId = GetCharacterActorId();
                     var petId = FindCharaPet();
 
-                    if (configuration.OutgoingColorEnabled || configuration.IncomingColorEnabled)
+                    if (_configuration.OutgoingColorEnabled || _configuration.IncomingColorEnabled)
                     {
-                        bool outPlayer = sourceId == charaId && configuration.OutgoingColorEnabled;
-                        bool outPet = sourceId == petId && configuration.PetDamageColorEnabled;
+                        bool outPlayer = sourceId == charaId && _configuration.OutgoingColorEnabled;
+                        bool outPet = sourceId == petId && _configuration.PetDamageColorEnabled;
                         bool outCheck = outPlayer || outPet;
 
-                        bool incCheck = sourceId != charaId && sourceId != petId && configuration.IncomingColorEnabled;
+                        bool incCheck = sourceId != charaId && sourceId != petId && _configuration.IncomingColorEnabled;
 
                         // match up the condition with what to check
                         // because right now with this OR, it doesn't care if the source is incoming and outgoing is enabled
@@ -477,23 +519,23 @@ namespace DamageInfoPlugin
                                 switch (dmgType)
                                 {
                                     case DamageType.Physical:
-                                        color = ImGui.GetColorU32(configuration.PhysicalColor);
+                                        color = ImGui.GetColorU32(_configuration.PhysicalColor);
                                         break;
                                     case DamageType.Magic:
-                                        color = ImGui.GetColorU32(configuration.MagicColor);
+                                        color = ImGui.GetColorU32(_configuration.MagicColor);
                                         break;
                                     case DamageType.Darkness:
-                                        color = ImGui.GetColorU32(configuration.DarknessColor);
+                                        color = ImGui.GetColorU32(_configuration.DarknessColor);
                                         break;
                                 }
                             }
                         }
                     }
 
-                    if (configuration.SourceTextEnabled)
+                    if (_configuration.SourceTextEnabled)
                     {
                         bool tgtCheck = sourceId != charaId && sourceId != petId;
-                        bool petCheck = sourceId == petId && configuration.PetSourceTextEnabled;
+                        bool petCheck = sourceId == petId && _configuration.PetSourceTextEnabled;
 
                         if (tgtCheck || petCheck)
                         {
@@ -503,9 +545,9 @@ namespace DamageInfoPlugin
                     }
 
                     // Attack text checks
-                    if ((sourceId != charaId && sourceId != petId && !configuration.IncomingAttackTextEnabled) ||
-                        (sourceId == charaId && !configuration.OutgoingAttackTextEnabled) ||
-                        (sourceId == petId && !configuration.PetAttackTextEnabled))
+                    if ((sourceId != charaId && sourceId != petId && !_configuration.IncomingAttackTextEnabled) ||
+                        (sourceId == charaId && !_configuration.OutgoingAttackTextEnabled) ||
+                        (sourceId == petId && !_configuration.PetAttackTextEnabled))
                     {
                         text1 = "";
                     }
@@ -513,18 +555,18 @@ namespace DamageInfoPlugin
             }
             catch (Exception e)
             {
-                PluginLog.Information($"{e.Message} {e.StackTrace}");
+                PluginLog.Error(e, "An error has occurred in Damage Info");
             }
         }
 
-        private SeString GetNewText(int sourceId, SeString originalText)
+        private SeString GetNewText(uint sourceId, SeString originalText)
         {
             SeString name = GetActorName(sourceId);
             var newPayloads = new List<Payload>();
 
             if (name.Payloads.Count == 0) return originalText;
             
-            switch (clientState.ClientLanguage)
+            switch (_clientState.ClientLanguage)
             {
                 case ClientLanguage.Japanese:
                     newPayloads.AddRange(name.Payloads);
@@ -554,21 +596,18 @@ namespace DamageInfoPlugin
             return new SeString(newPayloads);
         }
 
-        private delegate void ReceiveActionEffectDelegate(int sourceId, IntPtr sourceCharacter, IntPtr pos,
-            IntPtr effectHeader, IntPtr effectArray, IntPtr effectTrail);
-
-        private void ReceiveActionEffect(int sourceId, IntPtr sourceCharacter, IntPtr pos,
+        private void ReceiveActionEffect(uint sourceId, IntPtr sourceCharacter, IntPtr pos,
             IntPtr effectHeader, IntPtr effectArray, IntPtr effectTrail)
         {
             try
             {
                 Cleanup();
                 // no log, no processing... just get him outta here
-                if ((!configuration.EffectLogEnabled &&
-                     !(configuration.IncomingColorEnabled || configuration.OutgoingColorEnabled) &&
-                     !configuration.SourceTextEnabled))
+                if ((!_configuration.DebugLogEnabled &&
+                     !(_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled) &&
+                     !_configuration.SourceTextEnabled))
                 {
-                    receiveActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray,
+                    _receiveActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray,
                         effectTrail);
                     return;
                 }
@@ -577,11 +616,11 @@ namespace DamageInfoPlugin
                 uint animId = *((ushort*) effectHeader.ToPointer() + 0xE);
                 ushort op = *((ushort*) effectHeader.ToPointer() - 0x7);
                 byte targetCount = *(byte*) (effectHeader + 0x21);
-                EffectLog(
+                DebugLog(Effect,
                     $"--- source actor: {sourceId}, action id {id}, anim id {animId}, opcode: {op:X} numTargets: {targetCount} ---");
 
 // #if DEBUG
-                if (configuration.EffectLogEnabled)
+                if (_configuration.DebugLogEnabled)
                 {
                     // EffectLog($"packet (effectHeader): {effectHeader.ToInt64():X}");
                     // LogFromPtr(effectHeader, 1024);
@@ -653,59 +692,55 @@ namespace DamageInfoPlugin
                     if (entries[i].type == ActionEffectType.Damage
                         || entries[i].type == ActionEffectType.BlockedDamage
                         || entries[i].type == ActionEffectType.ParriedDamage
-                        // || entries[i].type == ActionEffectType.Miss
+                        || entries[i].type == ActionEffectType.Heal
+                        || entries[i].type == ActionEffectType.Invulnerable
+                        || entries[i].type == ActionEffectType.Miss
                     )
                     {
-                        EffectLog($"{entries[i]}, s: {sourceId} t: {tTarget}");
+                        DebugLog(Effect, $"{entries[i]}, s: {sourceId} t: {tTarget}");
                         if (tDmg == 0) continue;
 
                         var actId = GetCharacterActorId();
                         var charaPet = FindCharaPet();
 
                         // if source text is enabled, we know exactly when to add it
-                        if (configuration.SourceTextEnabled &&
-                            ((int) tTarget == actId || configuration.PetSourceTextEnabled && sourceId == charaPet))
+                        if (_configuration.SourceTextEnabled &&
+                            ((int) tTarget == actId || _configuration.PetSourceTextEnabled && sourceId == charaPet))
                         {
-                            AddToFutureFlyText(tDmg, actionToDamageTypeDict[animId], sourceId);
+                            AddToFutureFlyText(tDmg, _actionToDamageTypeDict[animId], sourceId);
                         }
-                        else if (configuration.OutgoingColorEnabled &&
-                                 (sourceId == actId || configuration.PetDamageColorEnabled && sourceId == charaPet))
+                        else if (_configuration.OutgoingColorEnabled &&
+                                 (sourceId == actId || _configuration.PetDamageColorEnabled && sourceId == charaPet))
                         {
-                            AddToFutureFlyText(tDmg, actionToDamageTypeDict[animId], sourceId);
+                            AddToFutureFlyText(tDmg, _actionToDamageTypeDict[animId], sourceId);
                         }
-                        else if ((int) tTarget == actId && configuration.IncomingColorEnabled)
+                        else if ((int) tTarget == actId && _configuration.IncomingColorEnabled)
                         {
-                            AddToFutureFlyText(tDmg, actionToDamageTypeDict[animId], sourceId);
+                            AddToFutureFlyText(tDmg, _actionToDamageTypeDict[animId], sourceId);
                         }
                     }
                 }
 
-                receiveActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray,
+                _receiveActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray,
                     effectTrail);
             }
             catch (Exception e)
             {
-                PluginLog.Information($"{e.Message} {e.StackTrace}");
+                PluginLog.Error(e, "An error has occurred in Damage Info");
             }
         }
 
-        private void EffectLog(string str)
+        private void DebugLog(LogType type, string str)
         {
-            if (configuration.EffectLogEnabled)
-                PluginLog.Information($"[effect] {str}");
+            if (_configuration.DebugLogEnabled)
+                PluginLog.Information($"[{type}] {str}");
         }
 
-        private void FlyTextLog(string str)
-        {
-            if (configuration.FlyTextLogEnabled)
-                PluginLog.Information($"[flytext] {str}");
-        }
-
-        private bool TryGetFlyTextDamageType(uint dmg, out DamageType type, out int sourceId)
+        private bool TryGetFlyTextDamageType(uint dmg, out DamageType type, out uint sourceId)
         {
             type = DamageType.Unknown;
             sourceId = 0;
-            if (!futureFlyText.TryGetValue(dmg, out var list) || list == null || list.Count == 0) return false;
+            if (!_futureFlyText.TryGetValue(dmg, out var list) || list == null || list.Count == 0) return false;
 
             var item = list[0];
             foreach (var tuple in list)
@@ -723,12 +758,12 @@ namespace DamageInfoPlugin
             return new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
         }
 
-        private void AddToFutureFlyText(uint dmg, DamageType type, int sourceId)
+        private void AddToFutureFlyText(uint dmg, DamageType type, uint sourceId)
         {
             long ms = Ms();
-            var toInsert = new Tuple<long, DamageType, int>(ms, type, sourceId);
+            var toInsert = new Tuple<long, DamageType, uint>(ms, type, sourceId);
 
-            if (futureFlyText.TryGetValue(dmg, out var list))
+            if (_futureFlyText.TryGetValue(dmg, out var list))
             {
                 if (list != null)
                 {
@@ -737,28 +772,28 @@ namespace DamageInfoPlugin
                 }
             }
 
-            var tmpList = new List<Tuple<long, DamageType, int>> {toInsert};
-            futureFlyText[dmg] = tmpList;
+            var tmpList = new List<Tuple<long, DamageType, uint>> {toInsert};
+            _futureFlyText[dmg] = tmpList;
         }
 
         // Not all effect packets end up being flytext
         // so we have to clean up the orphaned entries here
         private void Cleanup()
         {
-            if (futureFlyText == null) return;
+            if (_futureFlyText == null) return;
 
             long ms = Ms();
-            if (ms - lastCleanup < CleanupInterval) return;
+            if (ms - _lastCleanup < CleanupInterval) return;
 
             // FlyTextLog($"pre-cleanup flytext: {futureFlyText.Values.Count}");
             // FlyTextLog($"pre-cleanup text: {text.Count}");
-            lastCleanup = ms;
+            _lastCleanup = ms;
 
             var toRemove = new List<uint>();
 
-            foreach (uint key in futureFlyText.Keys)
+            foreach (uint key in _futureFlyText.Keys)
             {
-                if (!futureFlyText.TryGetValue(key, out var list)) continue;
+                if (!_futureFlyText.TryGetValue(key, out var list)) continue;
                 if (list == null)
                 {
                     toRemove.Add(key);
@@ -778,7 +813,7 @@ namespace DamageInfoPlugin
             }
 
             foreach (uint key in toRemove)
-                futureFlyText.TryRemove(key, out var unused);
+                _futureFlyText.TryRemove(key, out var unused);
             
             // FlyTextLog($"post-cleanup flytext: {futureFlyText.Values.Count}");
             // FlyTextLog($"post-cleanup text: {text.Count}");
@@ -786,10 +821,10 @@ namespace DamageInfoPlugin
         
         public void ClearFlyTextQueue()
         {
-            if (futureFlyText == null) return;
+            if (_futureFlyText == null) return;
 
-            FlyTextLog($"clearing flytext queue of {futureFlyText.Values.Count} items...");
-            futureFlyText.Clear();
+            DebugLog(FlyText, $"clearing flytext queue of {_futureFlyText.Values.Count} items...");
+            _futureFlyText.Clear();
         }
     }
 }

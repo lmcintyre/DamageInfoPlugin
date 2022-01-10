@@ -22,8 +22,9 @@ namespace DamageInfoPlugin
         public Vector4 MagicBgColor { get; set; } = new Vector4(1, 1, 1, 1);
         public Vector4 DarknessBgColor { get; set; } = new Vector4(1, 1, 1, 1);
 
-        public bool EffectLogEnabled { get; set; } = false;
-        public bool FlyTextLogEnabled { get; set; } = false;
+        public bool DebugLogEnabled { get; set; } = false;
+        // public bool EffectLogEnabled { get; set; } = false;
+        // public bool FlyTextLogEnabled { get; set; } = false;
 
         private bool _incomingColorEnabled = true;
         private bool _outgoingColorEnabled = true;
