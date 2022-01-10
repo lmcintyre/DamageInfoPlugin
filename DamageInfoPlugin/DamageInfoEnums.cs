@@ -38,6 +38,14 @@
         Physical = 7,
         LimitBreak = 8,
     }
+
+    public enum ActionStep
+    {
+        None,
+        Effect,
+        Screenlog,
+        Flytext,
+    }
     
     public enum LogType
     {
