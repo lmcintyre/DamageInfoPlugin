@@ -50,6 +50,7 @@
     public enum LogType
     {
         FlyText,
+        Castbar,
         ScreenLog,
         Effect,
         FlyTextWrite

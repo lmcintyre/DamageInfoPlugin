@@ -98,9 +98,8 @@ namespace DamageInfoPlugin
             _objectTable = objectTable;
             _clientState = clientState;
             _targetManager = targetManager;
-            
-            _configuration = pi.GetPluginConfig() as Configuration ?? new Configuration();
-            _configuration.Initialize(pi, this);
+
+            _configuration = LoadConfig(pi);
             _ui = new PluginUI(_configuration, this);
 
             _actionToDamageTypeDict = new Dictionary<uint, DamageType>();
@@ -109,7 +108,7 @@ namespace DamageInfoPlugin
             
             cmdMgr.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Display the Damage Info configuration interface."
+                HelpMessage = "Display the Damage Info configuration interfae."
             });
 
             _nullCastbarInfo = new CastbarInfo { unitBase = null, gauge = null, bg = null };
@@ -117,6 +116,8 @@ namespace DamageInfoPlugin
             try
             {
                 var actionSheet = dataMgr.GetExcelSheet<Action>();
+                if (actionSheet == null)
+                    throw new NullReferenceException();
                 foreach (var row in actionSheet)
                 {
                     var tmpType = (DamageType)row.AttackType.Row;
@@ -127,7 +128,7 @@ namespace DamageInfoPlugin
 
                     _actionToDamageTypeDict.Add(row.RowId, tmpType);
 
-                    if (row.ActionCategory.Row > 4 && row.ActionCategory.Row < 11)
+                    if (row.ActionCategory.Row is > 4 and < 11)
                         _ignoredCastActions.Add(row.ActionCategory.Row);
                 }
 
@@ -172,6 +173,31 @@ namespace DamageInfoPlugin
             pi.UiBuilder.OpenConfigUi += DrawConfigUI;
         }
 
+        private Configuration LoadConfig(DalamudPluginInterface pi)
+        {
+            var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
+            if (config.Version == 0)
+            {
+                config = new Configuration
+                {
+                    PhysicalColor = config.PhysicalColor,
+                    MagicColor = config.MagicColor,
+                    DarknessColor = config.DarknessColor,
+                    PhysicalBgColor = config.PhysicalBgColor,
+                    MagicBgColor = config.MagicBgColor,
+                    DarknessBgColor = config.DarknessBgColor,
+                    PhysicalCastColor = config.PhysicalCastColor,
+                    MagicCastColor = config.MagicCastColor,
+                    DarknessCastColor = config.DarknessCastColor,
+                    MainTargetCastBarColorEnabled = config.MainTargetCastBarColorEnabled,
+                    FocusTargetCastBarColorEnabled = config.FocusTargetCastBarColorEnabled
+                };
+            }
+            
+            config.Initialize(pi, this);
+            return config;
+        }
+
         public void Dispose()
         {
             _actionStore.Dispose();
@@ -214,43 +240,43 @@ namespace DamageInfoPlugin
         #region castbar
         private CastbarInfo GetTargetInfoUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfo", 1).ToPointer();
+            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfo", 1).ToPointer();
 
-            if (unitbase == null) return _nullCastbarInfo;
+            if (unitBase == null) return _nullCastbarInfo;
 
             return new CastbarInfo
             {
-                unitBase = unitbase,
-                gauge = (AtkImageNode*)unitbase->UldManager.NodeList[TargetInfoGaugeNodeIndex],
-                bg = (AtkImageNode*)unitbase->UldManager.NodeList[TargetInfoGaugeBgNodeIndex]
+                unitBase = unitBase,
+                gauge = (AtkImageNode*)unitBase->UldManager.NodeList[TargetInfoGaugeNodeIndex],
+                bg = (AtkImageNode*)unitBase->UldManager.NodeList[TargetInfoGaugeBgNodeIndex]
             };
         }
 
         private CastbarInfo GetTargetInfoSplitUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfoCastBar", 1).ToPointer();
+            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfoCastBar", 1).ToPointer();
 
-            if (unitbase == null) return _nullCastbarInfo;
+            if (unitBase == null) return _nullCastbarInfo;
 
             return new CastbarInfo
             {
-                unitBase = unitbase,
-                gauge = (AtkImageNode*)unitbase->UldManager.NodeList[TargetInfoSplitGaugeNodeIndex],
-                bg = (AtkImageNode*)unitbase->UldManager.NodeList[TargetInfoSplitGaugeBgNodeIndex]
+                unitBase = unitBase,
+                gauge = (AtkImageNode*)unitBase->UldManager.NodeList[TargetInfoSplitGaugeNodeIndex],
+                bg = (AtkImageNode*)unitBase->UldManager.NodeList[TargetInfoSplitGaugeBgNodeIndex]
             };
         }
 
         private CastbarInfo GetFocusTargetUiElements()
         {
-            AtkUnitBase* unitbase = (AtkUnitBase*)_gameGui.GetAddonByName("_FocusTargetInfo", 1).ToPointer();
+            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_FocusTargetInfo", 1).ToPointer();
 
-            if (unitbase == null) return _nullCastbarInfo;
+            if (unitBase == null) return _nullCastbarInfo;
 
             return new CastbarInfo
             {
-                unitBase = unitbase,
-                gauge = (AtkImageNode*)unitbase->UldManager.NodeList[FocusTargetInfoGaugeNodeIndex],
-                bg = (AtkImageNode*)unitbase->UldManager.NodeList[FocusTargetInfoGaugeBgNodeIndex]
+                unitBase = unitBase,
+                gauge = (AtkImageNode*)unitBase->UldManager.NodeList[FocusTargetInfoGaugeNodeIndex],
+                bg = (AtkImageNode*)unitBase->UldManager.NodeList[FocusTargetInfoGaugeBgNodeIndex]
             };
         }
 
@@ -272,36 +298,34 @@ namespace DamageInfoPlugin
                 targetInfo.bg->AtkResNode.Color.A = 0xFF;
             }
 
-            if (splitInfo.unitBase != null && splitInfo.gauge != null && splitInfo.bg != null)
-            {
-                splitInfo.gauge->AtkResNode.Color.R = 0xFF;
-                splitInfo.gauge->AtkResNode.Color.G = 0xFF;
-                splitInfo.gauge->AtkResNode.Color.B = 0xFF;
-                splitInfo.gauge->AtkResNode.Color.A = 0xFF;
+            if (splitInfo.unitBase == null || splitInfo.gauge == null || splitInfo.bg == null) return;
+            
+            splitInfo.gauge->AtkResNode.Color.R = 0xFF;
+            splitInfo.gauge->AtkResNode.Color.G = 0xFF;
+            splitInfo.gauge->AtkResNode.Color.B = 0xFF;
+            splitInfo.gauge->AtkResNode.Color.A = 0xFF;
 
-                splitInfo.bg->AtkResNode.Color.R = 0xFF;
-                splitInfo.bg->AtkResNode.Color.G = 0xFF;
-                splitInfo.bg->AtkResNode.Color.B = 0xFF;
-                splitInfo.bg->AtkResNode.Color.A = 0xFF;
-            }
+            splitInfo.bg->AtkResNode.Color.R = 0xFF;
+            splitInfo.bg->AtkResNode.Color.G = 0xFF;
+            splitInfo.bg->AtkResNode.Color.B = 0xFF;
+            splitInfo.bg->AtkResNode.Color.A = 0xFF;
         }
 
         public void ResetFocusTargetCastBar()
         {
             var ftInfo = GetFocusTargetUiElements();
 
-            if (ftInfo.unitBase != null && ftInfo.gauge != null && ftInfo.bg != null)
-            {
-                ftInfo.gauge->AtkResNode.Color.R = 0xFF;
-                ftInfo.gauge->AtkResNode.Color.G = 0xFF;
-                ftInfo.gauge->AtkResNode.Color.B = 0xFF;
-                ftInfo.gauge->AtkResNode.Color.A = 0xFF;
+            if (ftInfo.unitBase == null || ftInfo.gauge == null || ftInfo.bg == null) return;
+            
+            ftInfo.gauge->AtkResNode.Color.R = 0xFF;
+            ftInfo.gauge->AtkResNode.Color.G = 0xFF;
+            ftInfo.gauge->AtkResNode.Color.B = 0xFF;
+            ftInfo.gauge->AtkResNode.Color.A = 0xFF;
 
-                ftInfo.bg->AtkResNode.Color.R = 0xFF;
-                ftInfo.bg->AtkResNode.Color.G = 0xFF;
-                ftInfo.bg->AtkResNode.Color.B = 0xFF;
-                ftInfo.bg->AtkResNode.Color.A = 0xFF;
-            }
+            ftInfo.bg->AtkResNode.Color.R = 0xFF;
+            ftInfo.bg->AtkResNode.Color.G = 0xFF;
+            ftInfo.bg->AtkResNode.Color.B = 0xFF;
+            ftInfo.bg->AtkResNode.Color.A = 0xFF;
         }
 
         private void SetCastBarDetour(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
@@ -315,8 +339,8 @@ namespace DamageInfoPlugin
             var targetInfo = GetTargetInfoUiElements();
             var splitInfo = GetTargetInfoSplitUiElements();
 
-            bool combinedInvalid = targetInfo.unitBase == null || targetInfo.gauge == null || targetInfo.bg == null;
-            bool splitInvalid = splitInfo.unitBase == null || splitInfo.gauge == null || splitInfo.bg == null;
+            var combinedInvalid = targetInfo.unitBase == null || targetInfo.gauge == null || targetInfo.bg == null;
+            var splitInvalid = splitInfo.unitBase == null || splitInfo.gauge == null || splitInfo.bg == null;
 
             if (combinedInvalid && splitInvalid)
             {
@@ -346,27 +370,29 @@ namespace DamageInfoPlugin
 
             var ftInfo = GetFocusTargetUiElements();
 
-            bool focusTargetInvalid = ftInfo.unitBase == null || ftInfo.gauge == null || ftInfo.bg == null;
+            var focusTargetInvalid = ftInfo.unitBase == null || ftInfo.gauge == null || ftInfo.bg == null;
 
-            if (thisPtr.ToPointer() == ftInfo.unitBase && !focusTargetInvalid)
-            {
-                GameObject focusTarget = _targetManager.FocusTarget;
-                ColorCastBar(focusTarget, ftInfo, _setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
-            }
+            if (thisPtr.ToPointer() != ftInfo.unitBase || focusTargetInvalid) return;
+            
+            var focusTarget = _targetManager.FocusTarget;
+            ColorCastBar(focusTarget, ftInfo, _setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
         }
 
         private void ColorCastBar(GameObject target, CastbarInfo info, Hook<SetCastBarDelegate> hook,
             IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5)
         {
+            // DebugLog(Castbar, $"coloring cast bar");
             if (target == null || target is not BattleNpc battleTarget)
             {
+                // DebugLog(Castbar, $"target {target}");
+                // DebugLog(Castbar, $"type {target?.GetType()}");
                 hook.Original(thisPtr, a2, a3, a4, a5);
                 return;
             }
 
             var actionId = battleTarget.CastActionId;
-
-            _actionToDamageTypeDict.TryGetValue(actionId, out DamageType type);
+            _actionToDamageTypeDict.TryGetValue(actionId, out var type);
+            // DebugLog(Castbar, $"casting {actionId} {type}");
             if (_ignoredCastActions.Contains(actionId))
             {
                 info.gauge->AtkResNode.Color.R = 0xFF;
@@ -434,7 +460,7 @@ namespace DamageInfoPlugin
 
         private uint GetCharacterActorId()
         {
-            return _clientState.LocalPlayer.ObjectId;
+            return _clientState.LocalPlayer?.ObjectId ?? 0;
         }
 
         private SeString GetActorName(uint id)
@@ -454,18 +480,27 @@ namespace DamageInfoPlugin
                 // ushort op = *((ushort*) effectHeader.ToPointer() - 0x7);
                 // DebugLog(Effect, $"--- source actor: {sourceId}, action id {id}, anim id {animId}, opcode: {op:X} numTargets: {targetCount} ---");
 
-                GetEntryCount(effectHeader->TargetCount, out var effectsEntries, out var targetEntries);
+                var entryCount = effectHeader->TargetCount switch
+                {
+                    0 => 0,
+                    1 => 8,
+                    <= 8 => 64,
+                    <= 16 => 128,
+                    <= 24 => 192,
+                    <= 32 => 256,
+                    _ => 0
+                };
 
-                for (int i = 0; i < effectsEntries; i++)
+                for (int i = 0; i < entryCount; i++)
                 {
                     if (effectArray[i].type == ActionEffectType.Nothing) continue;
 
-                    var tTarget = effectTail[i / 8];
-                    uint tDmg = effectArray[i].value;
+                    var target = effectTail[i / 8];
+                    uint dmg = effectArray[i].value;
                     if (effectArray[i].mult != 0)
-                        tDmg += ((uint)ushort.MaxValue + 1) * effectArray[i].mult;
+                        dmg += ((uint)ushort.MaxValue + 1) * effectArray[i].mult;
 
-                    DebugLog(Effect, $"{effectArray[i]}, s: {sourceId} t: {tTarget}");
+                    DebugLog(Effect, $"{effectArray[i]}, s: {sourceId} t: {target}");
 
                     var newEffect = new ActionEffectInfo
                     {
@@ -474,8 +509,8 @@ namespace DamageInfoPlugin
                         type = effectArray[i].type,
                         // we fill in LogKind later 
                         sourceId = sourceId,
-                        targetId = tTarget,
-                        value = tDmg,
+                        targetId = target,
+                        value = dmg,
                     };
 
                     _actionStore.AddEffect(newEffect);
@@ -541,11 +576,10 @@ namespace DamageInfoPlugin
             {
                 var ftKind = kind;
 
-                // wrap this here to lower overhead when not logging
                 if (_configuration.DebugLogEnabled)
                 {
-                    var str1 = text1?.TextValue?.Replace("%", "%%");
-                    var str2 = text2?.TextValue?.Replace("%", "%%");
+                    var str1 = text1?.TextValue.Replace("%", "%%");
+                    var str2 = text2?.TextValue.Replace("%", "%%");
 
                     DebugLog(FlyText, $"flytext created: kind: {ftKind} ({(int)kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
                     DebugLog(FlyText, $"text1: {str1} | text2: {str2}");
@@ -570,7 +604,7 @@ namespace DamageInfoPlugin
                 if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled) && _actionToDamageTypeDict.TryGetValue(info.actionId, out var dmgType))
                 {
                     var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
-                    var outgoingCheck = isCharaAction && !isCharaTarget && _configuration.OutgoingColorEnabled;
+                    var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && _configuration.OutgoingColorEnabled;
                     var petCheck = !isCharaAction && !isCharaTarget && petIds.Contains(info.sourceId) && _configuration.PetColorEnabled;
 
                     if (incomingCheck || outgoingCheck || petCheck)
@@ -662,39 +696,6 @@ namespace DamageInfoPlugin
                 DamageType.Darkness => ImGui.GetColorU32(_configuration.DarknessColor),
                 _ => fallback
             };
-        }
-
-        private void GetEntryCount(int targetCount, out int effectsEntries, out int targetEntries)
-        {
-            effectsEntries = 0;
-            targetEntries = 1;
-            switch (targetCount)
-            {
-                case 0:
-                    effectsEntries = 0;
-                    targetEntries = 1;
-                    break;
-                case 1:
-                    effectsEntries = 8;
-                    targetEntries = 1;
-                    break;
-                case <= 8:
-                    effectsEntries = 64;
-                    targetEntries = 8;
-                    break;
-                case <= 16:
-                    effectsEntries = 128;
-                    targetEntries = 16;
-                    break;
-                case <= 24:
-                    effectsEntries = 192;
-                    targetEntries = 24;
-                    break;
-                case <= 32:
-                    effectsEntries = 256;
-                    targetEntries = 32;
-                    break;
-            }
         }
     }
 }

@@ -8,7 +8,7 @@ namespace DamageInfoPlugin
     [Serializable]
     public class Configuration : IPluginConfiguration
     {
-	    private bool _mainTargetCastBarColorEnabled = false;
+	    private bool _mainTargetCastBarColorEnabled;
 	    public bool MainTargetCastBarColorEnabled
 	    {
 		    get => _mainTargetCastBarColorEnabled;
@@ -18,8 +18,8 @@ namespace DamageInfoPlugin
 			    _mainTargetCastBarColorEnabled = value;
 		    }
 	    }
-        
-	    private bool _focusTargetCastBarColorEnabled = false;
+
+	    private bool _focusTargetCastBarColorEnabled;
 	    public bool FocusTargetCastBarColorEnabled
 	    {
 		    get => _focusTargetCastBarColorEnabled;
@@ -30,7 +30,7 @@ namespace DamageInfoPlugin
 		    }
 	    }
         
-	    public int Version { get; set; } = 0;
+	    public int Version { get; set; } = 1;
 
 	    public Vector4 PhysicalColor { get; set; } = new(1, 0, 0, 1);
 	    public Vector4 MagicColor { get; set; } = new(0, 0, 1, 1);
@@ -44,20 +44,20 @@ namespace DamageInfoPlugin
 	    public Vector4 MagicBgColor { get; set; } = new(1, 1, 1, 1);
 	    public Vector4 DarknessBgColor { get; set; } = new(1, 1, 1, 1);
 
-	    public bool DebugLogEnabled { get; set; } = false;
+	    public bool DebugLogEnabled { get; set; }
         
-	    public bool IncomingColorEnabled { get; set; }
-	    public bool OutgoingColorEnabled { get; set; }
-	    public bool PetColorEnabled { get; set; }
+	    public bool IncomingColorEnabled { get; set; } = true;
+	    public bool OutgoingColorEnabled { get; set; } = true;
+	    public bool PetColorEnabled { get; set; } = true;
         
 	    public bool SourceTextEnabled { get; set; }
 	    public bool PetSourceTextEnabled { get; set; }
 	    public bool HealSourceTextEnabled { get; set; }
-        
-	    public bool IncomingAttackTextEnabled { get; set; }
-	    public bool OutgoingAttackTextEnabled { get; set; }
-	    public bool PetAttackTextEnabled { get; set; }
-	    public bool HealAttackTextEnabled { get; set; }
+
+	    public bool IncomingAttackTextEnabled { get; set; } = true;
+	    public bool OutgoingAttackTextEnabled { get; set; } = true;
+	    public bool PetAttackTextEnabled { get; set; } = true;
+	    public bool HealAttackTextEnabled { get; set; } = true;
         
         [NonSerialized]
         private DalamudPluginInterface _pluginInterface;

@@ -11,14 +11,14 @@ namespace DamageInfoPlugin
     {
         private ulong CleanupInterval = 30000;
 
-        private ConcurrentDictionary<uint, List<ActionEffectInfo>> _store;
-        private Configuration _config;
+        private readonly ConcurrentDictionary<uint, List<ActionEffectInfo>> _store;
+        private readonly Configuration _config;
         private ulong _lastCleanup;
 
         public ActionEffectStore(Configuration config)
         {
             _config = config;
-            _store = new();
+            _store = new ConcurrentDictionary<uint, List<ActionEffectInfo>>();
             _lastCleanup = GetTick();
         }
 
@@ -39,7 +39,7 @@ namespace DamageInfoPlugin
 
             var toRemove = new List<uint>();
 
-            foreach (uint key in _store.Keys)
+            foreach (var key in _store.Keys)
             {
                 if (!_store.TryGetValue(key, out var list)) continue;
                 if (list == null)
@@ -60,7 +60,7 @@ namespace DamageInfoPlugin
                     toRemove.Add(key);
             }
 
-            foreach (uint key in toRemove)
+            foreach (var key in toRemove)
                 _store.TryRemove(key, out var unused);
 
             StoreLog($"post-cleanup: {_store.Values.Count}");
@@ -69,7 +69,6 @@ namespace DamageInfoPlugin
         public void Dispose()
         {
             _store.Clear();
-            _store = null;
         }
 
         public void AddEffect(ActionEffectInfo info)
@@ -82,8 +81,7 @@ namespace DamageInfoPlugin
             }
             else
             {
-                tmpList = new List<ActionEffectInfo>();
-                tmpList.Add(info);
+                tmpList = new List<ActionEffectInfo> { info };
                 _store.TryAdd(info.value, tmpList);
             }
 
@@ -96,7 +94,8 @@ namespace DamageInfoPlugin
             if (!_store.TryGetValue(value, out var list))
                 return;
 
-            var effect = list.FirstOrDefault(x => x.actionId == actionId
+            var effect = list.FirstOrDefault(x => x.step == ActionStep.Effect 
+                                                  && x.actionId == actionId
                                                   && x.sourceId == sourceId
                                                   && x.targetId == targetId);
 
@@ -104,6 +103,7 @@ namespace DamageInfoPlugin
                 return;
 
             effect.kind = logKind;
+            effect.step = ActionStep.Screenlog;
 
             list.Add(effect);
             StoreLog($"Updated effect {effect}");
@@ -116,7 +116,7 @@ namespace DamageInfoPlugin
             if (!_store.TryGetValue(value, out var list))
                 return false;
 
-            var effect = list.FirstOrDefault(x => x.value == value && KindCheck(x, targetKind) && TargetCheck(x, charaId, petIds));
+            var effect = list.FirstOrDefault(x => x.value == value && x.step == ActionStep.Screenlog && KindCheck(x, targetKind) && TargetCheck(x, charaId, petIds));
 
             if (!list.Remove(effect))
                 return false;
