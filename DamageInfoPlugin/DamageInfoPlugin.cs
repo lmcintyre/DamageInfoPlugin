@@ -43,7 +43,6 @@ namespace DamageInfoPlugin
         private readonly PluginUI _ui;
 
         private readonly GameGui _gameGui;
-        private readonly DalamudPluginInterface _pi;
         private readonly CommandManager _cmdMgr;
         private readonly FlyTextGui _ftGui;
         private readonly ObjectTable _objectTable;
@@ -93,7 +92,6 @@ namespace DamageInfoPlugin
         {
             _gameGui = gameGui;
             _ftGui = ftGui;
-            _pi = pi;
             _cmdMgr = cmdMgr;
             _objectTable = objectTable;
             _clientState = clientState;
@@ -219,7 +217,6 @@ namespace DamageInfoPlugin
 
             _ui.Dispose();
             _cmdMgr.RemoveHandler(CommandName);
-            _pi.Dispose();
         }
 
         private void OnCommand(string command, string args)
@@ -605,7 +602,7 @@ namespace DamageInfoPlugin
                 {
                     var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
                     var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && _configuration.OutgoingColorEnabled;
-                    var petCheck = !isCharaAction && !isCharaTarget && petIds.Contains(info.sourceId) && _configuration.PetColorEnabled;
+                    var petCheck = !isCharaAction && !isCharaTarget && petIds.Contains(info.sourceId) && !isHealingAction && _configuration.PetColorEnabled;
 
                     if (incomingCheck || outgoingCheck || petCheck)
                         color = GetDamageColor(dmgType);
@@ -631,7 +628,7 @@ namespace DamageInfoPlugin
                 {
                     var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && !isPetAction && !_configuration.IncomingAttackTextEnabled;
                     var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && !isPetAction && !_configuration.OutgoingAttackTextEnabled;
-                    var petCheck = !isCharaAction && !isHealingAction && !isPetAction && !isCharaTarget && !_configuration.PetAttackTextEnabled;
+                    var petCheck = !isCharaAction && !isCharaTarget && !isHealingAction && isPetAction && !_configuration.PetAttackTextEnabled;
                     var healCheck = isHealingAction && !isPetAction && !_configuration.HealAttackTextEnabled;
 
                     if (incomingCheck || outgoingCheck || petCheck || healCheck)
