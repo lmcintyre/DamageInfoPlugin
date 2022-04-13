@@ -130,10 +130,10 @@ namespace DamageInfoPlugin
                         _ignoredCastActions.Add(row.ActionCategory.Row);
                 }
 
-                var receiveActionEffectFuncPtr = scanner.ScanText("4C 89 44 24 ?? 53 56 57 41 54 41 57");
+                var receiveActionEffectFuncPtr = scanner.ScanText("4C 89 44 24 ?? 55 56 57 41 54 41 55 41 56 48 8D 6C 24");
                 _receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, (ReceiveActionEffectDelegate)ReceiveActionEffect);
 
-                var addScreenLogPtr = scanner.ScanText("E8 ?? ?? ?? ?? BB ?? ?? ?? ?? EB 37");
+                var addScreenLogPtr = scanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? EB 3A");
                 _addScreenLogHook = new Hook<AddScreenLogDelegate>(addScreenLogPtr, (AddScreenLogDelegate)AddScreenLogDetour);
 
                 var setCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 4C 8D 8F ?? ?? ?? ?? 4D 8B C6");
