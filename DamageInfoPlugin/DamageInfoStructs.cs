@@ -53,6 +53,7 @@ namespace DamageInfoPlugin
         public uint sourceId;
         public ulong targetId;
         public uint value;
+        public bool positionalSucceed;
 
         public override bool Equals(object o)
         {
@@ -62,18 +63,19 @@ namespace DamageInfoPlugin
                 && other.kind == kind
                 && other.sourceId == sourceId
                 && other.targetId == targetId
-                && other.value == value;
+                && other.value == value
+                && other.positionalSucceed == positionalSucceed;
         }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(actionId, (int)kind, sourceId, targetId, value);
+            return HashCode.Combine(actionId, (int)kind, sourceId, targetId, value, positionalSucceed);
         }
 
         public override string ToString()
         {
             return
-                $"actionId: {actionId} kind: {kind} ({(int)kind}) sourceId: {sourceId} (0x{sourceId:X}) targetId: {targetId} (0x{targetId:X}) value: {value}";
+                $"actionId: {actionId} kind: {kind} ({(int)kind}) sourceId: {sourceId} (0x{sourceId:X}) targetId: {targetId} (0x{targetId:X}) value: {value} positionalSucceed: {positionalSucceed}";
         }
     }
 }

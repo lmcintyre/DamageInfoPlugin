@@ -43,12 +43,15 @@ namespace DamageInfoPlugin
 	    public Vector4 PhysicalBgColor { get; set; } = new(1, 1, 1, 1);
 	    public Vector4 MagicBgColor { get; set; } = new(1, 1, 1, 1);
 	    public Vector4 DarknessBgColor { get; set; } = new(1, 1, 1, 1);
+	    
+	    public Vector4 PositionalColor { get; set; } = new(0, 1, 0, 1);
 
 	    public bool DebugLogEnabled { get; set; }
         
 	    public bool IncomingColorEnabled { get; set; } = true;
 	    public bool OutgoingColorEnabled { get; set; } = true;
 	    public bool PetColorEnabled { get; set; } = true;
+	    public bool PositionalColorEnabled { get; set; } = true;
         
 	    public bool SourceTextEnabled { get; set; }
 	    public bool PetSourceTextEnabled { get; set; }

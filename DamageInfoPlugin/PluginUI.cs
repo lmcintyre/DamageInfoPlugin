@@ -51,6 +51,7 @@ namespace DamageInfoPlugin
                 var lPhys = configuration.PhysicalColor;
                 var lMag = configuration.MagicColor;
                 var lDark = configuration.DarknessColor;
+                var lPos = configuration.PositionalColor;
                 var gPhys = configuration.PhysicalCastColor;
                 var gMag = configuration.MagicCastColor;
                 var gDark = configuration.DarknessCastColor;
@@ -66,6 +67,7 @@ namespace DamageInfoPlugin
                 var incomingColorConfigValue = configuration.IncomingColorEnabled;
                 var outgoingColorConfigValue = configuration.OutgoingColorEnabled;
                 var petColorConfigValue = configuration.PetColorEnabled;
+                var posColorConfigValue = configuration.PositionalColorEnabled;
                 
                 var sourceTextConfigValue = configuration.SourceTextEnabled;
                 var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
@@ -77,7 +79,7 @@ namespace DamageInfoPlugin
                 var healAttackTextConfigValue = configuration.HealAttackTextEnabled;
 
                 // computed state
-                var colorAllConfigValue = incomingColorConfigValue && outgoingColorConfigValue && petColorConfigValue;
+                var colorAllConfigValue = incomingColorConfigValue && outgoingColorConfigValue && petColorConfigValue && posColorConfigValue;
                 var sourceTextAllConfigValue = sourceTextConfigValue && petSourceTextConfigValue && healSourceTextConfigValue;
                 var attackTextAllConfigValue = incAttackTextConfigValue && outAttackTextConfigValue && petAttackTextConfigValue && healAttackTextConfigValue;
 
@@ -114,6 +116,7 @@ namespace DamageInfoPlugin
                         configuration.IncomingColorEnabled = colorAllConfigValue;
                         configuration.OutgoingColorEnabled = colorAllConfigValue;
                         configuration.PetColorEnabled = colorAllConfigValue;
+                        configuration.PositionalColorEnabled = colorAllConfigValue;
                         configuration.Save();
                     }
                     ImGui.NextColumn();
@@ -192,6 +195,16 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
                     ImGui.NextColumn();
+                    ImGui.Text("Positionals");
+                    ImGui.NextColumn();
+                    if (ImGui.Checkbox("##positionalcolor", ref posColorConfigValue))
+                    {
+                        configuration.PositionalColorEnabled = posColorConfigValue;
+                        configuration.Save();
+                    }
+                    ImGui.NextColumn();
+                    ImGui.NextColumn();
+                    ImGui.NextColumn();
                     ImGui.Text("Heals");
                     ImGui.NextColumn();
                     ImGui.NextColumn();
@@ -224,6 +237,12 @@ namespace DamageInfoPlugin
                     if (ImGui.ColorEdit4("Darkness##flytext", ref lDark))
                     {
                         configuration.DarknessColor = lDark;
+                        configuration.Save();
+                    }
+                    
+                    if (ImGui.ColorEdit4("Positionals##flytext", ref lPos))
+                    {
+                        configuration.PositionalColor = lPos;
                         configuration.Save();
                     }
                 }

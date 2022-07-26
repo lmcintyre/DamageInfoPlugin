@@ -3,6 +3,7 @@ using Dalamud.Plugin;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Text;
 using Dalamud;
 using Dalamud.Data;
 using Dalamud.Game;
@@ -14,10 +15,13 @@ using Dalamud.Game.Gui.FlyText;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
+using Dalamud.Interface.Colors;
 using Dalamud.IoC;
 using Dalamud.Logging;
+using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
+using Lumina.Excel.GeneratedSheets;
 using static DamageInfoPlugin.LogType;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 using Character = FFXIVClientStructs.FFXIV.Client.Game.Character.Character;
@@ -61,23 +65,23 @@ namespace DamageInfoPlugin
             int val3,
             int val4);
 
-        private readonly Hook<AddScreenLogDelegate> _addScreenLogHook;
-
         private delegate void ReceiveActionEffectDelegate(uint sourceId, Character* sourceCharacter, IntPtr pos, EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail);
-
-        private readonly Hook<ReceiveActionEffectDelegate> _receiveActionEffectHook;
-
         private delegate void SetCastBarDelegate(IntPtr thisPtr, IntPtr a2, IntPtr a3, IntPtr a4, char a5);
 
+        private readonly Hook<AddScreenLogDelegate> _addScreenLogHook;
+        private readonly Hook<ReceiveActionEffectDelegate> _receiveActionEffectHook;
         private readonly Hook<SetCastBarDelegate> _setCastBarHook;
         private readonly Hook<SetCastBarDelegate> _setFocusTargetCastBarHook;
 
         private readonly CastbarInfo _nullCastbarInfo;
-
         private Dictionary<uint, DamageType> _actionToDamageTypeDict;
         private readonly HashSet<uint> _ignoredCastActions;
-
         private ActionEffectStore _actionStore;
+
+        private readonly HashSet<int> _positionalStore = new();
+        private readonly int[] _positionalFallback = {
+            56, 66, 79, 88, 2255, 2258, 3554, 3556, 3563, 7481, 7482, 24382, 24383, 25772,
+        };
 
         public DamageInfoPlugin(
             [RequiredVersion("1.0")] GameGui gameGui,
@@ -99,23 +103,24 @@ namespace DamageInfoPlugin
 
             _configuration = LoadConfig(pi);
             _ui = new PluginUI(_configuration, this);
-
             _actionToDamageTypeDict = new Dictionary<uint, DamageType>();
             _ignoredCastActions = new HashSet<uint>();
             _actionStore = new ActionEffectStore(_configuration);
-            
+            _nullCastbarInfo = new CastbarInfo { unitBase = null, gauge = null, bg = null };
+
             cmdMgr.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
                 HelpMessage = "Display the Damage Info configuration interfae."
             });
 
-            _nullCastbarInfo = new CastbarInfo { unitBase = null, gauge = null, bg = null };
-
             try
             {
                 var actionSheet = dataMgr.GetExcelSheet<Action>();
+                var actionTransientSheet = dataMgr.GetExcelSheet<ActionTransient>(ClientLanguage.English);
+
                 if (actionSheet == null)
                     throw new NullReferenceException();
+                
                 foreach (var row in actionSheet)
                 {
                     var tmpType = (DamageType)row.AttackType.Row;
@@ -130,6 +135,31 @@ namespace DamageInfoPlugin
                         _ignoredCastActions.Add(row.ActionCategory.Row);
                 }
 
+                if (actionTransientSheet != null)
+                {
+                    foreach (var row in actionTransientSheet)
+                    {
+                        var desc = row.Description.ToDalamudString().TextValue;
+                        if (desc.Contains("target's rear") || desc.Contains("target's flank"))
+                            _positionalStore.Add((int) row.RowId);
+                    }
+                }
+                else
+                {
+                    PluginLog.Debug("Runtime positional data failed, falling back.");
+                    foreach (var id in _positionalFallback)
+                        _positionalStore.Add(id);
+                }
+
+                // Code to update the positional fallback
+                // var sb = new StringBuilder();
+                // foreach (var id in _positionalStore)
+                // {
+                //     sb.Append(id);
+                //     sb.Append(", ");
+                // }
+                // PluginLog.Debug(sb.ToString());
+                
                 var receiveActionEffectFuncPtr = scanner.ScanText("4C 89 44 24 ?? 55 56 57 41 54 41 55 41 56 48 8D 6C 24");
                 _receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, (ReceiveActionEffectDelegate)ReceiveActionEffect);
 
@@ -470,7 +500,7 @@ namespace DamageInfoPlugin
             try
             {
                 _actionStore.Cleanup();
-
+                
                 DebugLog(Effect, $"--- source actor: {sourceCharacter->GameObject.ObjectID}, action id {effectHeader->ActionId}, anim id {effectHeader->AnimationId} numTargets: {effectHeader->TargetCount} ---");
 
                 // TODO: Reimplement opcode logging, if it's even useful. Original code follows
@@ -487,6 +517,12 @@ namespace DamageInfoPlugin
                     <= 32 => 256,
                     _ => 0
                 };
+
+                var positionalSucceedId = -1;
+                for (int i = 0; i < entryCount; i++)
+                    if (effectArray[i].type == ActionEffectType.PositionalSucceed)
+                        positionalSucceedId = effectArray[i].value;
+                var positionalSucceed = _positionalStore.Contains(positionalSucceedId) && positionalSucceedId == effectHeader->ActionId;
 
                 for (int i = 0; i < entryCount; i++)
                 {
@@ -508,6 +544,7 @@ namespace DamageInfoPlugin
                         sourceId = sourceId,
                         targetId = target,
                         value = dmg,
+                        positionalSucceed = positionalSucceed,
                     };
 
                     _actionStore.AddEffect(newEffect);
@@ -602,10 +639,14 @@ namespace DamageInfoPlugin
                 {
                     var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
                     var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && _configuration.OutgoingColorEnabled;
+                    var posCheck = isCharaAction && info.positionalSucceed && _configuration.PositionalColorEnabled;
                     var petCheck = !isCharaAction && !isCharaTarget && petIds.Contains(info.sourceId) && !isHealingAction && _configuration.PetColorEnabled;
 
                     if (incomingCheck || outgoingCheck || petCheck)
                         color = GetDamageColor(dmgType);
+
+                    if (posCheck)
+                        color = ImGui.GetColorU32(_configuration.PositionalColor);
                 }
 
                 if (_configuration.SourceTextEnabled || _configuration.PetSourceTextEnabled || _configuration.HealSourceTextEnabled)

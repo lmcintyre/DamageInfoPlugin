@@ -20,7 +20,7 @@
         ApplyStatusEffectTarget = 15,
         ApplyStatusEffectSource = 16,
         StatusNoEffect = 20,
-        StartActionCombo = 27,
+        PositionalSucceed = 27,
         ComboSucceed = 28,
         Knockback = 33,
         Mount = 40,
