@@ -74,31 +74,26 @@ namespace DamageInfoPlugin
         private readonly HashSet<uint> _ignoredCastActions;
         private ActionEffectStore _actionStore;
         
-        // Well. I implemented this assuming one of the EffectResult types was specific
-        // to positionals. So, I just detected that and everything was good. Except
-        // that effect was only sent when you hit the *combo and the positional*
-        // for a given skill, which means it worked for a lot of cases, but not all.
-        // However, I shipped this version. And said wow look cool positional support!
-        // Except now that I let the cat out of the bag, I can't just take it away, can I?
-        // So now we have this mess. Which will be cleaned up eventually. I hope.
+        // These are the skills' percentage potency increases sent by the server
+        // check research.csv for more info
         private readonly Dictionary<int, HashSet<int>> _positionalData = new()
         {
-            {   56, new HashSet<int> {19}},                 // Snap Punch
-            {   66, new HashSet<int> {46}},                 // Demolish
+            {   56, new HashSet<int> {19, 21}},                 // Snap Punch
+            {   66, new HashSet<int> {46, 60}},                 // Demolish
             // {   79, new HashSet<int> {}},                // Heavy Thrust
             {   88, new HashSet<int> {28, 61}},             // Chaos Thrust
-            { 2255, new HashSet<int> {30, 68}},             // Aeolian Edge
+            { 2255, new HashSet<int> {30, 37, 68, 75}},             // Aeolian Edge
             { 2258, new HashSet<int> {25}},                 // Trick Attack
             { 3554, new HashSet<int> {10, 13}},             // Fang and Claw
             { 3556, new HashSet<int> {10, 13}},             // Wheeling Thrust
-            { 3563, new HashSet<int> {30, 66}},             // Armor Crush
+            { 3563, new HashSet<int> {30, 37, 66, 73}},             // Armor Crush
             { 7481, new HashSet<int> {29, 33, 68, 72}},     // Gekko (rear)
             { 7482, new HashSet<int> {29, 33, 68, 72}},     // Kasha (flank)
             {24382, new HashSet<int> {11, 13}},             // Gibbet (flank)
             {24383, new HashSet<int> {11, 13}},             // Gallows (rear)
             {25772, new HashSet<int> {28, 66}},             // Chaotic Spring
         };
-
+        
         public DamageInfoPlugin(
             [RequiredVersion("1.0")] GameGui gameGui,
             [RequiredVersion("1.0")] FlyTextGui ftGui,
@@ -210,9 +205,15 @@ namespace DamageInfoPlugin
                     MainTargetCastBarColorEnabled = config.MainTargetCastBarColorEnabled,
                     FocusTargetCastBarColorEnabled = config.FocusTargetCastBarColorEnabled
                 };
+            } 
+            else if (config.Version == 1)
+            {
+                config.Version = 2;
+                config.PositionalColorInvert = false;
             }
             
             config.Initialize(pi, this);
+            config.Save();
             return config;
         }
 
@@ -723,7 +724,7 @@ namespace DamageInfoPlugin
 
         private void DebugLog(LogType type, string str)
         {
-            if (_configuration.DebugLogEnabled && type == Effect)
+            if (_configuration.DebugLogEnabled)
                 PluginLog.Information($"[{type}] {str}");
         }
 

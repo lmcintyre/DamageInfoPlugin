@@ -30,7 +30,7 @@ namespace DamageInfoPlugin
 		    }
 	    }
         
-	    public int Version { get; set; } = 1;
+	    public int Version { get; set; } = 2;
 
 	    public Vector4 PhysicalColor { get; set; } = new(1, 0, 0, 1);
 	    public Vector4 MagicColor { get; set; } = new(0, 0, 1, 1);
@@ -52,7 +52,7 @@ namespace DamageInfoPlugin
 	    public bool OutgoingColorEnabled { get; set; } = true;
 	    public bool PetColorEnabled { get; set; } = true;
 	    public bool PositionalColorEnabled { get; set; } = true;
-	    public bool PositionalColorInvert { get; set; } = true;
+	    public bool PositionalColorInvert { get; set; } = false;
         
 	    public bool SourceTextEnabled { get; set; }
 	    public bool PetSourceTextEnabled { get; set; }
