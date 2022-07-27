@@ -20,12 +20,20 @@
         ApplyStatusEffectTarget = 15,
         ApplyStatusEffectSource = 16,
         StatusNoEffect = 20,
-        PositionalSucceed = 27,
-        ComboSucceed = 28,
+        Unknown0 = 27,
+        Unknown1 = 28,
         Knockback = 33,
         Mount = 40,
         VFX = 59,
+        JobGauge = 61,
     };
+
+    public enum PositionalState
+    {
+        Ignore,
+        Success,
+        Failure
+    }
 
     public enum DamageType
     {

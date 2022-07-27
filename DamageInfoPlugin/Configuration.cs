@@ -52,6 +52,7 @@ namespace DamageInfoPlugin
 	    public bool OutgoingColorEnabled { get; set; } = true;
 	    public bool PetColorEnabled { get; set; } = true;
 	    public bool PositionalColorEnabled { get; set; } = true;
+	    public bool PositionalColorInvert { get; set; } = true;
         
 	    public bool SourceTextEnabled { get; set; }
 	    public bool PetSourceTextEnabled { get; set; }

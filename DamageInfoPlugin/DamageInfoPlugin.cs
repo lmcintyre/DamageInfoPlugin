@@ -3,7 +3,6 @@ using Dalamud.Plugin;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Text;
 using Dalamud;
 using Dalamud.Data;
 using Dalamud.Game;
@@ -15,13 +14,10 @@ using Dalamud.Game.Gui.FlyText;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
-using Dalamud.Interface.Colors;
 using Dalamud.IoC;
 using Dalamud.Logging;
-using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
-using Lumina.Excel.GeneratedSheets;
 using static DamageInfoPlugin.LogType;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 using Character = FFXIVClientStructs.FFXIV.Client.Game.Character.Character;
@@ -77,10 +73,30 @@ namespace DamageInfoPlugin
         private Dictionary<uint, DamageType> _actionToDamageTypeDict;
         private readonly HashSet<uint> _ignoredCastActions;
         private ActionEffectStore _actionStore;
-
-        private readonly HashSet<int> _positionalStore = new();
-        private readonly int[] _positionalFallback = {
-            56, 66, 79, 88, 2255, 2258, 3554, 3556, 3563, 7481, 7482, 24382, 24383, 25772,
+        
+        // Well. I implemented this assuming one of the EffectResult types was specific
+        // to positionals. So, I just detected that and everything was good. Except
+        // that effect was only sent when you hit the *combo and the positional*
+        // for a given skill, which means it worked for a lot of cases, but not all.
+        // However, I shipped this version. And said wow look cool positional support!
+        // Except now that I let the cat out of the bag, I can't just take it away, can I?
+        // So now we have this mess. Which will be cleaned up eventually. I hope.
+        private readonly Dictionary<int, HashSet<int>> _positionalData = new()
+        {
+            {   56, new HashSet<int> {19}},                 // Snap Punch
+            {   66, new HashSet<int> {46}},                 // Demolish
+            // {   79, new HashSet<int> {}},                // Heavy Thrust
+            {   88, new HashSet<int> {28, 61}},             // Chaos Thrust
+            { 2255, new HashSet<int> {30, 68}},             // Aeolian Edge
+            { 2258, new HashSet<int> {25}},                 // Trick Attack
+            { 3554, new HashSet<int> {10, 13}},             // Fang and Claw
+            { 3556, new HashSet<int> {10, 13}},             // Wheeling Thrust
+            { 3563, new HashSet<int> {30, 66}},             // Armor Crush
+            { 7481, new HashSet<int> {29, 33, 68, 72}},     // Gekko (rear)
+            { 7482, new HashSet<int> {29, 33, 68, 72}},     // Kasha (flank)
+            {24382, new HashSet<int> {11, 13}},             // Gibbet (flank)
+            {24383, new HashSet<int> {11, 13}},             // Gallows (rear)
+            {25772, new HashSet<int> {28, 66}},             // Chaotic Spring
         };
 
         public DamageInfoPlugin(
@@ -110,13 +126,12 @@ namespace DamageInfoPlugin
 
             cmdMgr.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Display the Damage Info configuration interfae."
+                HelpMessage = "Display the Damage Info configuration interface.",
             });
 
             try
             {
                 var actionSheet = dataMgr.GetExcelSheet<Action>();
-                var actionTransientSheet = dataMgr.GetExcelSheet<ActionTransient>(ClientLanguage.English);
 
                 if (actionSheet == null)
                     throw new NullReferenceException();
@@ -135,42 +150,17 @@ namespace DamageInfoPlugin
                         _ignoredCastActions.Add(row.ActionCategory.Row);
                 }
 
-                if (actionTransientSheet != null)
-                {
-                    foreach (var row in actionTransientSheet)
-                    {
-                        var desc = row.Description.ToDalamudString().TextValue;
-                        if (desc.Contains("target's rear") || desc.Contains("target's flank"))
-                            _positionalStore.Add((int) row.RowId);
-                    }
-                }
-                else
-                {
-                    PluginLog.Debug("Runtime positional data failed, falling back.");
-                    foreach (var id in _positionalFallback)
-                        _positionalStore.Add(id);
-                }
-
-                // Code to update the positional fallback
-                // var sb = new StringBuilder();
-                // foreach (var id in _positionalStore)
-                // {
-                //     sb.Append(id);
-                //     sb.Append(", ");
-                // }
-                // PluginLog.Debug(sb.ToString());
-                
                 var receiveActionEffectFuncPtr = scanner.ScanText("4C 89 44 24 ?? 55 56 57 41 54 41 55 41 56 48 8D 6C 24");
-                _receiveActionEffectHook = new Hook<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, (ReceiveActionEffectDelegate)ReceiveActionEffect);
+                _receiveActionEffectHook = Hook<ReceiveActionEffectDelegate>.FromAddress(receiveActionEffectFuncPtr, ReceiveActionEffect);
 
                 var addScreenLogPtr = scanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? EB 3A");
-                _addScreenLogHook = new Hook<AddScreenLogDelegate>(addScreenLogPtr, (AddScreenLogDelegate)AddScreenLogDetour);
+                _addScreenLogHook = Hook<AddScreenLogDelegate>.FromAddress(addScreenLogPtr, AddScreenLogDetour);
 
                 var setCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 4C 8D 8F ?? ?? ?? ?? 4D 8B C6");
-                _setCastBarHook = new Hook<SetCastBarDelegate>(setCastBarFuncPtr, (SetCastBarDelegate)SetCastBarDetour);
+                _setCastBarHook = Hook<SetCastBarDelegate>.FromAddress(setCastBarFuncPtr, SetCastBarDetour);
 
                 var setFocusTargetCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 49 8B 47 20 4C 8B 6C 24");
-                _setFocusTargetCastBarHook = new Hook<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, (SetCastBarDelegate)SetFocusTargetCastBarDetour);
+                _setFocusTargetCastBarHook = Hook<SetCastBarDelegate>.FromAddress(setFocusTargetCastBarFuncPtr, SetFocusTargetCastBarDetour);
 
                 ftGui.FlyTextCreated += OnFlyTextCreated;
             }
@@ -518,12 +508,18 @@ namespace DamageInfoPlugin
                     _ => 0
                 };
 
-                var positionalSucceedId = -1;
-                for (int i = 0; i < entryCount; i++)
-                    if (effectArray[i].type == ActionEffectType.PositionalSucceed)
-                        positionalSucceedId = effectArray[i].value;
-                var positionalSucceed = _positionalStore.Contains(positionalSucceedId) && positionalSucceedId == effectHeader->ActionId;
-
+                // Check if we have data for this action ID.
+                // Then we can check if the p2 is in the expected value set for positional success.
+                var positionalState = PositionalState.Ignore;
+                if (_positionalData.TryGetValue(effectHeader->AnimationId, out var actionPosData))
+                {
+                    positionalState = PositionalState.Failure;
+                    for (int i = 0; i < entryCount; i++)
+                        if (effectArray[i].type == ActionEffectType.Damage)
+                            if (actionPosData.Contains(effectArray[i].param2))
+                                positionalState = PositionalState.Success;
+                }
+                
                 for (int i = 0; i < entryCount; i++)
                 {
                     if (effectArray[i].type == ActionEffectType.Nothing) continue;
@@ -544,7 +540,7 @@ namespace DamageInfoPlugin
                         sourceId = sourceId,
                         targetId = target,
                         value = dmg,
-                        positionalSucceed = positionalSucceed,
+                        positionalState = positionalState,
                     };
 
                     _actionStore.AddEffect(newEffect);
@@ -635,12 +631,18 @@ namespace DamageInfoPlugin
                 var isCharaAction = info.sourceId == charaId;
                 var isCharaTarget = info.targetId == charaId;
 
-                if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled) && _actionToDamageTypeDict.TryGetValue(info.actionId, out var dmgType))
+                if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled || _configuration.PositionalColorEnabled)
+                    && _actionToDamageTypeDict.TryGetValue(info.actionId, out var dmgType))
                 {
                     var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
                     var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && _configuration.OutgoingColorEnabled;
-                    var posCheck = isCharaAction && info.positionalSucceed && _configuration.PositionalColorEnabled;
                     var petCheck = !isCharaAction && !isCharaTarget && petIds.Contains(info.sourceId) && !isHealingAction && _configuration.PetColorEnabled;
+                    
+                    // Large check - check that it's a character action, we shouldn't ignore the state, and that positionals are enabled
+                    // then, check to see if we should color the success or the failure
+                    var posCheck = isCharaAction && info.positionalState != PositionalState.Ignore && _configuration.PositionalColorEnabled
+                                   && ((info.positionalState == PositionalState.Success && !_configuration.PositionalColorInvert) ||
+                                       (info.positionalState == PositionalState.Failure && _configuration.PositionalColorInvert));
 
                     if (incomingCheck || outgoingCheck || petCheck)
                         color = GetDamageColor(dmgType);
@@ -721,7 +723,7 @@ namespace DamageInfoPlugin
 
         private void DebugLog(LogType type, string str)
         {
-            if (_configuration.DebugLogEnabled)
+            if (_configuration.DebugLogEnabled && type == Effect)
                 PluginLog.Information($"[{type}] {str}");
         }
 

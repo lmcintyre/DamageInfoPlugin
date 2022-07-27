@@ -33,7 +33,7 @@ namespace DamageInfoPlugin
         public override string ToString()
         {
             return
-                $"Type: {type}, p0: {param0}, p1: {param1}, p2: {param2}, mult: {mult}, flags: {flags} | {Convert.ToString(flags, 2)}, value: {value}";
+                $"Type: {type}, p0: {param0:D3}, p1: {param1:D3}, p2: {param2:D3} 0x{param2:X2} '{Convert.ToString(param2, 2).PadLeft(8, '0')}', mult: {mult:D3}, flags: {flags:D3} | {Convert.ToString(flags, 2).PadLeft(8, '0')}, value: {value:D6}";
         }
     }
 
@@ -53,7 +53,7 @@ namespace DamageInfoPlugin
         public uint sourceId;
         public ulong targetId;
         public uint value;
-        public bool positionalSucceed;
+        public PositionalState positionalState;
 
         public override bool Equals(object o)
         {
@@ -64,18 +64,18 @@ namespace DamageInfoPlugin
                 && other.sourceId == sourceId
                 && other.targetId == targetId
                 && other.value == value
-                && other.positionalSucceed == positionalSucceed;
+                && other.positionalState == positionalState;
         }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(actionId, (int)kind, sourceId, targetId, value, positionalSucceed);
+            return HashCode.Combine(actionId, (int)kind, sourceId, targetId, value, positionalState);
         }
 
         public override string ToString()
         {
             return
-                $"actionId: {actionId} kind: {kind} ({(int)kind}) sourceId: {sourceId} (0x{sourceId:X}) targetId: {targetId} (0x{targetId:X}) value: {value} positionalSucceed: {positionalSucceed}";
+                $"actionId: {actionId} kind: {kind} ({(int)kind}) sourceId: {sourceId} (0x{sourceId:X}) targetId: {targetId} (0x{targetId:X}) value: {value} positionalState: {positionalState}";
         }
     }
 }

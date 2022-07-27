@@ -68,6 +68,7 @@ namespace DamageInfoPlugin
                 var outgoingColorConfigValue = configuration.OutgoingColorEnabled;
                 var petColorConfigValue = configuration.PetColorEnabled;
                 var posColorConfigValue = configuration.PositionalColorEnabled;
+                var posColorInvertConfigValue = configuration.PositionalColorInvert;
                 
                 var sourceTextConfigValue = configuration.SourceTextEnabled;
                 var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
@@ -220,6 +221,14 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
                     ImGui.Columns(1, "FT Options");
+                    ImGui.Separator();
+                    ImGui.BeginDisabled(!posColorConfigValue);
+                    if (ImGui.Checkbox("Color positionals when missed instead of when hit", ref posColorInvertConfigValue))
+                    {
+                        configuration.PositionalColorInvert = posColorInvertConfigValue;
+                        configuration.Save();
+                    }
+                    ImGui.EndDisabled();
                     ImGui.Separator();
                     ImGui.Text("Flytext Colors");
                     if (ImGui.ColorEdit4("Physical##flytext", ref lPhys))
