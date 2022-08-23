@@ -1,11 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
-    <PluginVersion>2.1.0.4</PluginVersion>
+    <PluginVersion>2.1.0.5</PluginVersion>
   </PropertyGroup>
   
   <PropertyGroup>
-    <TargetFramework>net5.0-windows</TargetFramework>
+    <TargetFramework>net6.0-windows</TargetFramework>
     <LangVersion>preview</LangVersion>
     <AssemblyTitle>DamageInfoPlugin</AssemblyTitle>
     <Product>DamageInfoPlugin</Product>
@@ -54,6 +54,6 @@
       <Private>False</Private>
     </Reference>
     
-    <PackageReference Include="DalamudPackager" Version="2.1.7" />
+    <PackageReference Include="DalamudPackager" Version="2.1.8" />
   </ItemGroup>
 </Project>

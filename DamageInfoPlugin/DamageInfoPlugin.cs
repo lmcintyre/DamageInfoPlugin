@@ -145,7 +145,7 @@ namespace DamageInfoPlugin
                         _ignoredCastActions.Add(row.ActionCategory.Row);
                 }
 
-                var receiveActionEffectFuncPtr = scanner.ScanText("4C 89 44 24 ?? 55 56 57 41 54 41 55 41 56 48 8D 6C 24");
+                var receiveActionEffectFuncPtr = scanner.ScanText("4C 89 44 24 ?? 55 56 41 54 41 55 41 56");
                 _receiveActionEffectHook = Hook<ReceiveActionEffectDelegate>.FromAddress(receiveActionEffectFuncPtr, ReceiveActionEffect);
 
                 var addScreenLogPtr = scanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? EB 3A");
