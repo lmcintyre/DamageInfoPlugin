@@ -1,11 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
-    <PluginVersion>2.1.0.5</PluginVersion>
+<!--    <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>-->
+    <DalamudLibPath>C:\Users\Liam\Documents\repos\DalamudNet7\bin\Debug\</DalamudLibPath>
+    <PluginVersion>2.2.0.0</PluginVersion>
   </PropertyGroup>
   
   <PropertyGroup>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net7.0-windows</TargetFramework>
     <LangVersion>preview</LangVersion>
     <AssemblyTitle>DamageInfoPlugin</AssemblyTitle>
     <Product>DamageInfoPlugin</Product>
@@ -54,6 +55,6 @@
       <Private>False</Private>
     </Reference>
     
-    <PackageReference Include="DalamudPackager" Version="2.1.8" />
+    <PackageReference Include="DalamudPackager" Version="2.1.10" />
   </ItemGroup>
 </Project>

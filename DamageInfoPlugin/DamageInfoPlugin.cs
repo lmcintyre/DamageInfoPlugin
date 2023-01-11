@@ -133,13 +133,14 @@ namespace DamageInfoPlugin
                 
                 foreach (var row in actionSheet)
                 {
-                    var tmpType = (DamageType)row.AttackType.Row;
-                    if (tmpType != DamageType.Magic
-                        && tmpType != DamageType.Darkness
-                        && tmpType != DamageType.Unknown)
-                        tmpType = DamageType.Physical;
-
-                    _actionToDamageTypeDict.Add(row.RowId, tmpType);
+                    var dmgType = unchecked((int)row.AttackType.Row) switch
+                    {
+                        <= 4 => DamageType.Physical,
+                        5 => DamageType.Magic,
+                        _ => DamageType.Unique,
+                    };
+                    
+                    _actionToDamageTypeDict.Add(row.RowId, dmgType);
 
                     if (row.ActionCategory.Row is > 4 and < 11)
                         _ignoredCastActions.Add(row.ActionCategory.Row);
@@ -148,7 +149,7 @@ namespace DamageInfoPlugin
                 var receiveActionEffectFuncPtr = scanner.ScanText("4C 89 44 24 ?? 55 56 41 54 41 55 41 56");
                 _receiveActionEffectHook = Hook<ReceiveActionEffectDelegate>.FromAddress(receiveActionEffectFuncPtr, ReceiveActionEffect);
 
-                var addScreenLogPtr = scanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? EB 3A");
+                var addScreenLogPtr = scanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? 41 F6 87");
                 _addScreenLogHook = Hook<AddScreenLogDelegate>.FromAddress(addScreenLogPtr, AddScreenLogDetour);
 
                 var setCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 4C 8D 8F ?? ?? ?? ?? 4D 8B C6");
@@ -258,7 +259,7 @@ namespace DamageInfoPlugin
         #region castbar
         private CastbarInfo GetTargetInfoUiElements()
         {
-            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfo", 1).ToPointer();
+            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfo").ToPointer();
 
             if (unitBase == null) return _nullCastbarInfo;
 
@@ -272,7 +273,7 @@ namespace DamageInfoPlugin
 
         private CastbarInfo GetTargetInfoSplitUiElements()
         {
-            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfoCastBar", 1).ToPointer();
+            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfoCastBar").ToPointer();
 
             if (unitBase == null) return _nullCastbarInfo;
 
@@ -286,7 +287,7 @@ namespace DamageInfoPlugin
 
         private CastbarInfo GetFocusTargetUiElements()
         {
-            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_FocusTargetInfo", 1).ToPointer();
+            var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_FocusTargetInfo").ToPointer();
 
             if (unitBase == null) return _nullCastbarInfo;
 
@@ -431,7 +432,7 @@ namespace DamageInfoPlugin
             {
                 DamageType.Physical => _configuration.PhysicalCastColor,
                 DamageType.Magic => _configuration.MagicCastColor,
-                DamageType.Darkness => _configuration.DarknessCastColor,
+                DamageType.Unique => _configuration.DarknessCastColor,
                 _ => Vector4.One
             };
 
@@ -439,7 +440,7 @@ namespace DamageInfoPlugin
             {
                 DamageType.Physical => _configuration.PhysicalBgColor,
                 DamageType.Magic => _configuration.MagicBgColor,
-                DamageType.Darkness => _configuration.DarknessBgColor,
+                DamageType.Unique => _configuration.DarknessBgColor,
                 _ => Vector4.One
             };
 
@@ -600,6 +601,7 @@ namespace DamageInfoPlugin
             ref SeString text2,
             ref uint color,
             ref uint icon,
+            ref uint damageTypeIcon,
             ref float yOffset,
             ref bool handled)
         {
@@ -615,6 +617,9 @@ namespace DamageInfoPlugin
                     DebugLog(FlyText, $"flytext created: kind: {ftKind} ({(int)kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
                     DebugLog(FlyText, $"text1: {str1} | text2: {str2}");
                 }
+
+                if (_configuration.SeDamageIconDisable)
+                    damageTypeIcon = 0;
 
                 var charaId = GetCharacterActorId();
                 var petIds = FindCharaPets();
@@ -635,6 +640,9 @@ namespace DamageInfoPlugin
                 if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled || _configuration.PositionalColorEnabled)
                     && _actionToDamageTypeDict.TryGetValue(info.actionId, out var dmgType))
                 {
+                    // Just curious
+                    SeCheck(info, damageTypeIcon, dmgType);
+                    
                     var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
                     var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && _configuration.OutgoingColorEnabled;
                     var petCheck = !isCharaAction && !isCharaTarget && petIds.Contains(info.sourceId) && !isHealingAction && _configuration.PetColorEnabled;
@@ -682,6 +690,18 @@ namespace DamageInfoPlugin
             catch (Exception e)
             {
                 PluginLog.Error(e, "An error has occurred in Damage Info");
+            }
+        }
+        
+        private void SeCheck(ActionEffectInfo info, uint damageTypeIcon, DamageType dmgType)
+        {
+            var seDmgType = (SeDamageType)damageTypeIcon;
+
+            if ((seDmgType == SeDamageType.Physical && dmgType != DamageType.Physical) ||
+                (seDmgType == SeDamageType.Magical && dmgType != DamageType.Magic) ||
+                (seDmgType == SeDamageType.Darkness && dmgType != DamageType.Unique))
+            {
+                PluginLog.Information($"Encountered a damage type mismatch on {info.actionId}: SE says {seDmgType}, damage info says {dmgType}");
             }
         }
 
@@ -734,7 +754,7 @@ namespace DamageInfoPlugin
             {
                 DamageType.Physical => ImGui.GetColorU32(_configuration.PhysicalColor),
                 DamageType.Magic => ImGui.GetColorU32(_configuration.MagicColor),
-                DamageType.Darkness => ImGui.GetColorU32(_configuration.DarknessColor),
+                DamageType.Unique => ImGui.GetColorU32(_configuration.DarknessColor),
                 _ => fallback
             };
         }

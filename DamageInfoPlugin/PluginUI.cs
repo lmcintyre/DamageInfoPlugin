@@ -69,6 +69,7 @@ namespace DamageInfoPlugin
                 var petColorConfigValue = configuration.PetColorEnabled;
                 var posColorConfigValue = configuration.PositionalColorEnabled;
                 var posColorInvertConfigValue = configuration.PositionalColorInvert;
+                var seDamageIconDisableValue = configuration.SeDamageIconDisable;
                 
                 var sourceTextConfigValue = configuration.SourceTextEnabled;
                 var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
@@ -89,15 +90,15 @@ namespace DamageInfoPlugin
                     ImGui.TextWrapped(
                         "Each attack in the game has a specific damage type, such as blunt, piercing, magic, " +
                         "limit break, \"breath\", and more. The only important damage types for mitigation are " +
-                        "physical (encompassing slashing, blunt, and piercing), magic, and breath (referred to the " +
+                        "physical (encompassing slashing, blunt, and piercing), magic, and unique (sometimes referred to by the " +
                         "community as \"darkness\" damage).");
                     ImGui.TextWrapped(
                         "Physical damage can be mitigated by reducing an enemy's strength stat, or with moves " +
                         "that specifically mention physical damage reduction. Magic damage can be mitigated by " +
                         "reducing an enemy's intelligence stat, or with moves that specifically mention magic damage " +
-                        "reduction. Darkness damage cannot be mitigated by reducing an enemy's stats or mitigating " +
+                        "reduction. Unique damage cannot be mitigated by reducing an enemy's stats or mitigating " +
                         "against physical or magic damage - only moves that \"reduce a target's damage dealt\" will " +
-                        "affect darkness damage.");
+                        "affect unique damage.");
                 }
 
                 if (ImGui.CollapsingHeader("Flytext"))
@@ -229,6 +230,11 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
                     ImGui.EndDisabled();
+                    if (ImGui.Checkbox("Disable vanilla damage type icons", ref seDamageIconDisableValue))
+                    {
+                        configuration.SeDamageIconDisable = seDamageIconDisableValue;
+                        configuration.Save();
+                    }
                     ImGui.Separator();
                     ImGui.Text("Flytext Colors");
                     if (ImGui.ColorEdit4("Physical##flytext", ref lPhys))
@@ -243,7 +249,7 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
 
-                    if (ImGui.ColorEdit4("Darkness##flytext", ref lDark))
+                    if (ImGui.ColorEdit4("Unique##flytext", ref lDark))
                     {
                         configuration.DarknessColor = lDark;
                         configuration.Save();
@@ -252,6 +258,44 @@ namespace DamageInfoPlugin
                     if (ImGui.ColorEdit4("Positionals##flytext", ref lPos))
                     {
                         configuration.PositionalColor = lPos;
+                        configuration.Save();
+                    }
+
+                    if (ImGui.Button("Set colors to match vanilla damage type icons"))
+                        ImGui.OpenPopup("Damage Info");
+
+                    var center = ImGui.GetMainViewport().GetCenter();
+                    ImGui.SetNextWindowPos(center, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
+                    var set = false;
+
+                    var b1 = true;
+                    if (ImGui.BeginPopupModal("Damage Info", ref b1, ImGuiWindowFlags.AlwaysAutoResize))
+                    {
+                        ImGui.Text("This will wipe your existing flytext colors for physical, magical,\n" +
+                                   "and unique damage, and replace them with pre-set colors\n" +
+                                   "that match the vanilla flytext damage type icons.\n" +
+                                   "This is meant to complement the vanilla damage icons\n" +
+                                   "rather than improve damage type visibility.\n\n" +
+                                   "This cannot be undone automatically.\n" +
+                                   "Are you sure you want to continue?");
+                        if (ImGui.Button("Continue"))
+                        {
+                            set = true;
+                            ImGui.CloseCurrentPopup();
+                        }
+                        ImGui.SameLine();
+                        if (ImGui.Button("Cancel"))
+                        {
+                            ImGui.CloseCurrentPopup();
+                        }
+                        ImGui.EndPopup();
+                    }
+                    
+                    if (set)
+                    {
+                        configuration.PhysicalColor = ImGui.ColorConvertU32ToFloat4(0xffc39c5f);
+                        configuration.MagicColor = ImGui.ColorConvertU32ToFloat4(0xffc059a8);
+                        configuration.DarknessColor = ImGui.ColorConvertU32ToFloat4(0xff49b859);
                         configuration.Save();
                     }
                 }
@@ -288,7 +332,7 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
 
-                    if (ImGui.ColorEdit4("Darkness##gauge", ref gDark))
+                    if (ImGui.ColorEdit4("Unique##gauge", ref gDark))
                     {
                         configuration.DarknessCastColor = gDark;
                         configuration.Save();
@@ -311,7 +355,7 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
 
-                    if (ImGui.ColorEdit4("Darkness##bg", ref bgDark))
+                    if (ImGui.ColorEdit4("Unique##bg", ref bgDark))
                     {
                         configuration.DarknessBgColor = bgDark;
                         configuration.Save();

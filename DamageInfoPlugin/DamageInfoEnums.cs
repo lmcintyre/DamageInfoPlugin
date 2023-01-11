@@ -42,9 +42,17 @@
         Piercing = 2,
         Blunt = 3,
         Magic = 5,
-        Darkness = 6,
+        Unique = 6,
         Physical = 7,
         LimitBreak = 8,
+    }
+
+    public enum SeDamageType
+    {
+        None = 0,
+        Physical = 60011,
+        Magical = 60012,
+        Darkness = 60013,
     }
 
     public enum ActionStep
