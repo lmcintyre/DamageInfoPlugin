@@ -127,7 +127,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		{
 			unitBase = null,
 			gauge = null,
-			bg = null
+			bg = null,
 		};
 
 		cmdMgr.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -379,7 +379,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		var castColor = type switch
 		{
 			DamageType.Physical => _configuration.PhysicalCastColor,
-			DamageType.Magic => _configuration.MagicCastColor,
+			DamageType.Magical => _configuration.MagicCastColor,
 			DamageType.Unique => _configuration.DarknessCastColor,
 			_ => Vector4.One,
 		};
@@ -387,7 +387,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		var bgColor = type switch
 		{
 			DamageType.Physical => _configuration.PhysicalBgColor,
-			DamageType.Magic => _configuration.MagicBgColor,
+			DamageType.Magical => _configuration.MagicBgColor,
 			DamageType.Unique => _configuration.DarknessBgColor,
 			_ => Vector4.One,
 		};
@@ -637,16 +637,20 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		var seDmgType = (SeDamageType)damageTypeIcon;
 
 		if ((seDmgType == SeDamageType.Physical && dmgType != DamageType.Physical) ||
-		    (seDmgType == SeDamageType.Magical && dmgType != DamageType.Magic) ||
-		    (seDmgType == SeDamageType.Darkness && dmgType != DamageType.Unique))
+		    (seDmgType == SeDamageType.Magical && dmgType != DamageType.Magical) ||
+		    (seDmgType == SeDamageType.Unique && dmgType != DamageType.Unique))
 		{
 			var warning = $"Encountered a damage type mismatch on {info.actionId}: SE says {seDmgType}, damage info says {dmgType}";
 			PluginLog.Information(warning);
 				
-#if DEBUG
-			var seStr = new SeStringBuilder().Add(new TextPayload($"[DamageInfoPlugin] {warning}")).Build();
+// #if DEBUG
+			var seStr = new SeStringBuilder()
+				.AddUiForeground("[DamageInfoPlugin]", 506)
+				.Add(new TextPayload($" {warning}."))
+				.AddUiForeground(" Please report this in the Damage Info thread in the Goat Place discord!", 60)
+				.Build();
 			_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
-#endif
+// #endif
 		}
 	}
 
@@ -698,7 +702,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		return type switch
 		{
 			DamageType.Physical => ImGui.GetColorU32(_configuration.PhysicalColor),
-			DamageType.Magic => ImGui.GetColorU32(_configuration.MagicColor),
+			DamageType.Magical => ImGui.GetColorU32(_configuration.MagicColor),
 			DamageType.Unique => ImGui.GetColorU32(_configuration.DarknessColor),
 			_ => fallback
 		};
@@ -712,7 +716,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			DamageType.Slashing => DamageType.Physical,
 			DamageType.Piercing => DamageType.Physical,
 			DamageType.Blunt => DamageType.Physical,
-			DamageType.Magic => DamageType.Magic,
+			DamageType.Magical => DamageType.Magical,
 			DamageType.Unique => DamageType.Unique,
 			DamageType.Physical => DamageType.Unique,
 			DamageType.LimitBreak => DamageType.Unique,

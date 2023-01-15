@@ -41,7 +41,7 @@
         Slashing = 1,
         Piercing = 2,
         Blunt = 3,
-        Magic = 5,
+        Magical = 5,
         Unique = 6,
         Physical = 7,
         LimitBreak = 8,
@@ -52,7 +52,7 @@
         None = 0,
         Physical = 60011,
         Magical = 60012,
-        Darkness = 60013,
+        Unique = 60013,
     }
 
     public enum ActionStep
