@@ -12,6 +12,7 @@ public static class DamageTypeExtensions
 			AttackType.Slashing => DamageType.Physical,
 			AttackType.Piercing => DamageType.Physical,
 			AttackType.Blunt => DamageType.Physical,
+			AttackType.Shot => DamageType.Physical,
 			AttackType.Magical => DamageType.Magical,
 			AttackType.Unique => DamageType.Unique,
 			AttackType.Physical => DamageType.Unique,

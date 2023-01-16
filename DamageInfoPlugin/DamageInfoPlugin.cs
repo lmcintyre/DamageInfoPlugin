@@ -431,9 +431,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		{
 			_actionStore.Cleanup();
 
-			var aId = GetCharacterActorId();
-			if (sourceCharacter->GameObject.ObjectID == aId)
-				DebugLog(Effect, $"--- source actor: {sourceCharacter->GameObject.ObjectID}, action id {effectHeader->ActionId}, anim id {effectHeader->AnimationId} numTargets: {effectHeader->TargetCount} ---");
+			DebugLog(Effect, $"--- source actor: {sourceCharacter->GameObject.ObjectID}, action id {effectHeader->ActionId}, anim id {effectHeader->AnimationId} numTargets: {effectHeader->TargetCount} ---");
 
 			// TODO: Reimplement opcode logging, if it's even useful. Original code follows
 			// ushort op = *((ushort*) effectHeader.ToPointer() - 0x7);
@@ -471,19 +469,15 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				if (effectArray[i].mult != 0)
 					dmg += ((uint)ushort.MaxValue + 1) * effectArray[i].mult;
 
-				if (sourceCharacter->GameObject.ObjectID == aId)
-					DebugLog(Effect, $"{effectArray[i]}, s: {sourceId} t: {target}");
-
-				var tmpDmgType = ((AttackType)effectArray[i].AttackType).ToDamageType();
-				if (sourceCharacter->GameObject.ObjectID == aId)
-					DebugLog(Effect, $"adding damage type of {tmpDmgType}");
+				var dmgType = ((AttackType)effectArray[i].AttackType).ToDamageType();
+				DebugLog(Effect, $"{effectArray[i]}, s: {sourceId} t: {target} dmgType {dmgType}");
 
 				var newEffect = new ActionEffectInfo
 				{
 					step = ActionStep.Effect,
 					actionId = effectHeader->ActionId,
 					type = effectArray[i].type,
-					damageType = tmpDmgType,
+					damageType = dmgType,
 					// we fill in LogKind later 
 					sourceId = sourceId,
 					targetId = target,
@@ -573,11 +567,19 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			var damageType = ((SeDamageType)damageTypeIcon).ToDamageType();
 			if (!_actionStore.TryGetEffect((uint)val1, damageType, ftKind, charaId, petIds, out var info))
 			{
-				DebugLog(FlyText, $"Failed to obtain info... {val1} {ftKind}");
+				DebugLog(FlyText, $"Failed to obtain info... {val1} {damageType} {ftKind} {charaId}");
 				return;
 			}
 
 			DebugLog(FlyText, $"Obtained info: {info}");
+			
+			SeCheck(info, (SeDamageType)damageTypeIcon, damageType);
+			
+			// I'd like to color dodges, so let's fallback in the case that we have a dodge - SE doesn't send info on these
+			if (info is { value: 0, kind: FlyTextKind.Miss or FlyTextKind.NamedMiss } && _actionToDamageTypeDict.TryGetValue(info.actionId, out damageType))
+			{
+				DebugLog(FlyText, $"Processed fallback actionId {info.actionId} to {damageType} added icon {damageTypeIcon}");
+			}
 
 			var isHealingAction = info.type == ActionEffectType.Heal;
 			var isPetAction = petIds.Contains(info.sourceId);
@@ -586,9 +588,6 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 			if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled || _configuration.PositionalColorEnabled))
 			{
-				var dmgType = info.damageType;
-				SeCheck(info, (SeDamageType)damageTypeIcon, dmgType);
-
 				var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
 				var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && _configuration.OutgoingColorEnabled;
 				var petCheck = !isCharaAction && !isCharaTarget && petIds.Contains(info.sourceId) && !isHealingAction && _configuration.PetColorEnabled;
@@ -600,7 +599,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				                   (info.positionalState == PositionalState.Failure && _configuration.PositionalColorInvert));
 
 				if (incomingCheck || outgoingCheck || petCheck)
-					color = GetDamageColor(dmgType);
+					color = GetDamageColor(damageType);
 
 				if (posCheck)
 					color = ImGui.GetColorU32(_configuration.PositionalColor);
@@ -650,7 +649,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				
 // #if DEBUG
 			var seStr = new SeStringBuilder()
-				.AddUiForeground("[DamageInfoPlugin]", 506)
+				.AddUiForeground("[DamageInfoPlugin 2.2.0.2]", 506)
 				.Add(new TextPayload($" {warning}."))
 				.AddUiForeground(" Please report this in the Damage Info thread in the Goat Place discord!", 60)
 				.Build();
@@ -698,7 +697,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private void DebugLog(LogType type, string str)
 	{
-		if (_configuration.DebugLogEnabled || type == Effect)
+		if (_configuration.DebugLogEnabled)
 			PluginLog.Information($"[{type}] {str}");
 	}
 

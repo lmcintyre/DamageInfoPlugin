@@ -41,6 +41,7 @@ public enum AttackType
     Slashing = 1,
     Piercing = 2,
     Blunt = 3,
+    Shot = 4,
     Magical = 5,
     Unique = 6,
     Physical = 7,
