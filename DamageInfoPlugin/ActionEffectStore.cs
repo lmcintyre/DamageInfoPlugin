@@ -88,16 +88,17 @@ namespace DamageInfoPlugin
             StoreLog($"Added effect {info}");
         }
 
-        public void UpdateEffect(uint actionId, uint sourceId, uint targetId, uint value, FlyTextKind logKind)
+        public void UpdateEffect(uint actionId, uint sourceId, uint targetId, uint value, uint damageType, FlyTextKind logKind)
         {
-            StoreLog($"Updating effect {actionId} {sourceId} {targetId} {value} with {logKind}...");
+            StoreLog($"Updating effect {actionId} {sourceId} {targetId} {value} {damageType} with {logKind}...");
             if (!_store.TryGetValue(value, out var list))
                 return;
-
+            
             var effect = list.FirstOrDefault(x => x.step == ActionStep.Effect 
                                                   && x.actionId == actionId
                                                   && x.sourceId == sourceId
-                                                  && x.targetId == targetId);
+                                                  && x.targetId == targetId
+                                                  && (uint)x.damageType == damageType);
 
             if (!list.Remove(effect))
                 return;
@@ -109,14 +110,18 @@ namespace DamageInfoPlugin
             StoreLog($"Updated effect {effect}");
         }
 
-        public bool TryGetEffect(uint value, FlyTextKind targetKind, uint charaId, List<uint> petIds, out ActionEffectInfo info)
+        public bool TryGetEffect(uint value, DamageType damageType, FlyTextKind targetKind, uint charaId, List<uint> petIds, out ActionEffectInfo info)
         {
-            StoreLog($"Looking for effect {value} {targetKind}...");
+            StoreLog($"Looking for effect {value} {damageType} {targetKind} {charaId}...");
             info = default;
             if (!_store.TryGetValue(value, out var list))
                 return false;
 
-            var effect = list.FirstOrDefault(x => x.value == value && x.step == ActionStep.Screenlog && KindCheck(x, targetKind) && TargetCheck(x, charaId, petIds));
+            var effect = list.FirstOrDefault(x => x.value == value
+                                                  && x.damageType == damageType
+                                                  && x.step == ActionStep.Screenlog
+                                                  && KindCheck(x, targetKind)
+                                                  && TargetCheck(x, charaId, petIds));
 
             if (!list.Remove(effect))
                 return false;

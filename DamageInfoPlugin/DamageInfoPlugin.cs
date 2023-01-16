@@ -144,7 +144,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 			foreach (var row in actionSheet)
 			{
-				var dmgType = GetDamageType((DamageType)row.AttackType.Row);
+				var dmgType = ((AttackType)row.AttackType.Row).ToDamageType();
 
 				_actionToDamageTypeDict.Add(row.RowId, dmgType);
 
@@ -431,7 +431,9 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		{
 			_actionStore.Cleanup();
 
-			DebugLog(Effect, $"--- source actor: {sourceCharacter->GameObject.ObjectID}, action id {effectHeader->ActionId}, anim id {effectHeader->AnimationId} numTargets: {effectHeader->TargetCount} ---");
+			var aId = GetCharacterActorId();
+			if (sourceCharacter->GameObject.ObjectID == aId)
+				DebugLog(Effect, $"--- source actor: {sourceCharacter->GameObject.ObjectID}, action id {effectHeader->ActionId}, anim id {effectHeader->AnimationId} numTargets: {effectHeader->TargetCount} ---");
 
 			// TODO: Reimplement opcode logging, if it's even useful. Original code follows
 			// ushort op = *((ushort*) effectHeader.ToPointer() - 0x7);
@@ -469,14 +471,19 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				if (effectArray[i].mult != 0)
 					dmg += ((uint)ushort.MaxValue + 1) * effectArray[i].mult;
 
-				DebugLog(Effect, $"{effectArray[i]}, s: {sourceId} t: {target}");
+				if (sourceCharacter->GameObject.ObjectID == aId)
+					DebugLog(Effect, $"{effectArray[i]}, s: {sourceId} t: {target}");
+
+				var tmpDmgType = ((AttackType)effectArray[i].AttackType).ToDamageType();
+				if (sourceCharacter->GameObject.ObjectID == aId)
+					DebugLog(Effect, $"adding damage type of {tmpDmgType}");
 
 				var newEffect = new ActionEffectInfo
 				{
 					step = ActionStep.Effect,
 					actionId = effectHeader->ActionId,
 					type = effectArray[i].type,
-					serverDamageType = GetDamageType((DamageType)effectArray[i].DamageType),
+					damageType = tmpDmgType,
 					// we fill in LogKind later 
 					sourceId = sourceId,
 					targetId = target,
@@ -504,7 +511,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		int actionId,
 		int val1,
 		int val2,
-		int val3,
+		int serverAttackType,
 		int val4)
 	{
 		try
@@ -515,21 +522,21 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			if (_configuration.DebugLogEnabled)
 			{
 				DebugLog(ScreenLog, $"{option} {actionKind} {actionId}");
-				DebugLog(ScreenLog, $"{val1} {val2} {val3} {val4}");
+				DebugLog(ScreenLog, $"{val1} {val2} {serverAttackType} {val4}");
 				var targetName = GetActorName(targetId);
 				var sourceName = GetActorName(sourceId);
 				DebugLog(ScreenLog, $"src {sourceId} {sourceName}");
 				DebugLog(ScreenLog, $"tgt {targetId} {targetName}");
 			}
 
-			_actionStore.UpdateEffect((uint)actionId, sourceId, targetId, (uint)val1, logKind);
+			_actionStore.UpdateEffect((uint)actionId, sourceId, targetId, (uint)val1, (uint)serverAttackType, logKind);
 		}
 		catch (Exception e)
 		{
 			PluginLog.Error(e, "An error occurred in Damage Info.");
 		}
 
-		_addScreenLogHook.Original(target, source, logKind, option, actionKind, actionId, val1, val2, val3, val4);
+		_addScreenLogHook.Original(target, source, logKind, option, actionKind, actionId, val1, val2, serverAttackType, val4);
 	}
 
 	private void OnFlyTextCreated(
@@ -563,7 +570,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			var charaId = GetCharacterActorId();
 			var petIds = FindCharaPets();
 
-			if (!_actionStore.TryGetEffect((uint)val1, ftKind, charaId, petIds, out var info))
+			var damageType = ((SeDamageType)damageTypeIcon).ToDamageType();
+			if (!_actionStore.TryGetEffect((uint)val1, damageType, ftKind, charaId, petIds, out var info))
 			{
 				DebugLog(FlyText, $"Failed to obtain info... {val1} {ftKind}");
 				return;
@@ -578,9 +586,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 			if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled || _configuration.PositionalColorEnabled))
 			{
-				var dmgType = info.serverDamageType;
-				// Just curious
-				SeCheck(info, damageTypeIcon, dmgType);
+				var dmgType = info.damageType;
+				SeCheck(info, (SeDamageType)damageTypeIcon, dmgType);
 
 				var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
 				var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && _configuration.OutgoingColorEnabled;
@@ -632,15 +639,13 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		}
 	}
 
-	private void SeCheck(ActionEffectInfo info, uint damageTypeIcon, DamageType dmgType)
+	private void SeCheck(ActionEffectInfo info, SeDamageType seDamageType, DamageType dmgType)
 	{
-		var seDmgType = (SeDamageType)damageTypeIcon;
-
-		if ((seDmgType == SeDamageType.Physical && dmgType != DamageType.Physical) ||
-		    (seDmgType == SeDamageType.Magical && dmgType != DamageType.Magical) ||
-		    (seDmgType == SeDamageType.Unique && dmgType != DamageType.Unique))
+		if ((seDamageType == SeDamageType.Physical && dmgType != DamageType.Physical) ||
+		    (seDamageType == SeDamageType.Magical && dmgType != DamageType.Magical) ||
+		    (seDamageType == SeDamageType.Unique && dmgType != DamageType.Unique))
 		{
-			var warning = $"Encountered a damage type mismatch on {info.actionId}: SE says {seDmgType}, damage info says {dmgType}";
+			var warning = $"Encountered a damage type mismatch on {info.actionId}: SE says {seDamageType}, damage info says {dmgType}";
 			PluginLog.Information(warning);
 				
 // #if DEBUG
@@ -693,7 +698,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private void DebugLog(LogType type, string str)
 	{
-		if (_configuration.DebugLogEnabled)
+		if (_configuration.DebugLogEnabled || type == Effect)
 			PluginLog.Information($"[{type}] {str}");
 	}
 
@@ -705,22 +710,6 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			DamageType.Magical => ImGui.GetColorU32(_configuration.MagicColor),
 			DamageType.Unique => ImGui.GetColorU32(_configuration.DarknessColor),
 			_ => fallback
-		};
-	}
-
-	private DamageType GetDamageType(DamageType type)
-	{
-		return type switch
-		{
-			DamageType.Unknown => DamageType.Unique,
-			DamageType.Slashing => DamageType.Physical,
-			DamageType.Piercing => DamageType.Physical,
-			DamageType.Blunt => DamageType.Physical,
-			DamageType.Magical => DamageType.Magical,
-			DamageType.Unique => DamageType.Unique,
-			DamageType.Physical => DamageType.Unique,
-			DamageType.LimitBreak => DamageType.Unique,
-			_ => DamageType.Unique,
 		};
 	}
 }
