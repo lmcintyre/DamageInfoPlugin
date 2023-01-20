@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace DamageInfoPlugin;
+﻿namespace DamageInfoPlugin;
 
 public static class DamageTypeExtensions
 {

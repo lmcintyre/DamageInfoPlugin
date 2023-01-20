@@ -647,14 +647,14 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			var warning = $"Encountered a damage type mismatch on {info.actionId}: SE says {seDamageType}, damage info says {dmgType}";
 			PluginLog.Information(warning);
 				
-// #if DEBUG
+#if DEBUG
 			var seStr = new SeStringBuilder()
-				.AddUiForeground("[DamageInfoPlugin 2.2.0.2]", 506)
+				.AddUiForeground("[DamageInfoPlugin]", 506)
 				.Add(new TextPayload($" {warning}."))
 				.AddUiForeground(" Please report this in the Damage Info thread in the Goat Place discord!", 60)
 				.Build();
 			_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
-// #endif
+#endif
 		}
 	}
 
