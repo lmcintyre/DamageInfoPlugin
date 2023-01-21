@@ -558,9 +558,6 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				DebugLog(FlyText, $"text1: {str1} | text2: {str2}");
 			}
 
-			if (_configuration.SeDamageIconDisable)
-				damageTypeIcon = 0;
-
 			var charaId = GetCharacterActorId();
 			var petIds = FindCharaPets();
 
@@ -631,6 +628,9 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				if (incomingCheck || outgoingCheck || petCheck || healCheck)
 					text1 = "";
 			}
+			
+			if (_configuration.SeDamageIconDisable)
+				damageTypeIcon = 0;
 		}
 		catch (Exception e)
 		{
