@@ -470,6 +470,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 					dmg += ((uint)ushort.MaxValue + 1) * effectArray[i].mult;
 
 				var dmgType = ((AttackType)effectArray[i].AttackType).ToDamageType();
+				if (effectArray[i].type == ActionEffectType.Heal) dmgType = DamageType.None;
 				DebugLog(Effect, $"{effectArray[i]}, s: {sourceId} t: {target} dmgType {dmgType}");
 
 				var newEffect = new ActionEffectInfo
