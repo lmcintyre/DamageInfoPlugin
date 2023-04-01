@@ -195,14 +195,21 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		Fools2023.SetConfiguration(_configuration);
 		if (_configuration.Fools2023Enabled && Fools2023.IsFools())
 		{
-			var seStr = new SeStringBuilder()
-				.AddUiForeground("[DamageInfoPlugin]", 506)
-				.Add(new TextPayload(" New damage types"))
-				.AddUiForeground(" UNLOCKED! ", 504)
-				.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer. Note that damage icons must be enabled in Damage Info to see them."))
-				.Build();
-			_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
+			_clientState.Login += FoolsMessage;
 		}
+	}
+
+	private void FoolsMessage(object sender, EventArgs e)
+	{
+		var seStr = new SeStringBuilder()
+			.AddUiForeground("[DamageInfoPlugin]", 506)
+			.Add(new TextPayload(" New damage types"))
+			.AddUiForeground(" UNLOCKED! ", 504)
+			.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer. Note that damage icons must be enabled in Damage Info to see them."))
+			.Build();
+			
+		_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
+		_clientState.Login -= FoolsMessage;
 	}
 
 	private Configuration LoadConfig(DalamudPluginInterface pi)
