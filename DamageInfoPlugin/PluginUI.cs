@@ -71,6 +71,7 @@ namespace DamageInfoPlugin
                 var posColorInvertConfigValue = configuration.PositionalColorInvert;
                 var seDamageIconDisableValue = configuration.SeDamageIconDisable;
                 var foolsConfigValue = configuration.Fools2023Enabled;
+                var foolsFrequencyValue = configuration.FoolsFrequency;
                 
                 var sourceTextConfigValue = configuration.SourceTextEnabled;
                 var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
@@ -236,11 +237,22 @@ namespace DamageInfoPlugin
                         configuration.SeDamageIconDisable = seDamageIconDisableValue;
                         configuration.Save();
                     }
-                    if (ImGui.Checkbox("Disable new rare damage types [April Fools]", ref foolsConfigValue))
+                    if (ImGui.Checkbox("Enable new rare damage types [April Fools]", ref foolsConfigValue))
                     {
                         configuration.Fools2023Enabled = foolsConfigValue;
                         configuration.Save();
                     }
+                    if (foolsConfigValue)
+                    {
+                        ImGui.TextUnformatted("Rare damage type occurrence chance [April Fools]:");
+                        if (ImGui.SliderInt("##foolsfreq", ref foolsFrequencyValue, 1, 10))
+                        {
+                            configuration.FoolsFrequency = foolsFrequencyValue;
+                            configuration.Save();
+                        }
+                        ImGui.TextUnformatted($"A rare damage type will occur for 1 in every {foolsFrequencyValue} named attacks.");    
+                    }
+                    
                     ImGui.Separator();
                     ImGui.Text("Flytext Colors");
                     if (ImGui.ColorEdit4("Physical##flytext", ref lPhys))

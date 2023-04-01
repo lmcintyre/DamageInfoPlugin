@@ -192,13 +192,14 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		pi.UiBuilder.Draw += DrawUI;
 		pi.UiBuilder.OpenConfigUi += DrawConfigUI;
 
+		Fools2023.SetConfiguration(_configuration);
 		if (_configuration.Fools2023Enabled && Fools2023.IsFools())
 		{
 			var seStr = new SeStringBuilder()
 				.AddUiForeground("[DamageInfoPlugin]", 506)
-				.Add(new TextPayload("New damage types"))
-				.AddUiForeground("UNLOCKED!", 504)
-				.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer."))
+				.Add(new TextPayload(" New damage types"))
+				.AddUiForeground(" UNLOCKED! ", 504)
+				.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer. Note that damage icons must be enabled in Damage Info to see them."))
 				.Build();
 			_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
 		}
