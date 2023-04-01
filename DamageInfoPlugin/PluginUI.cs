@@ -70,6 +70,7 @@ namespace DamageInfoPlugin
                 var posColorConfigValue = configuration.PositionalColorEnabled;
                 var posColorInvertConfigValue = configuration.PositionalColorInvert;
                 var seDamageIconDisableValue = configuration.SeDamageIconDisable;
+                var foolsConfigValue = configuration.Fools2023Enabled;
                 
                 var sourceTextConfigValue = configuration.SourceTextEnabled;
                 var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
@@ -233,6 +234,11 @@ namespace DamageInfoPlugin
                     if (ImGui.Checkbox("Disable vanilla damage type icons", ref seDamageIconDisableValue))
                     {
                         configuration.SeDamageIconDisable = seDamageIconDisableValue;
+                        configuration.Save();
+                    }
+                    if (ImGui.Checkbox("Disable new rare damage types [April Fools]", ref foolsConfigValue))
+                    {
+                        configuration.Fools2023Enabled = foolsConfigValue;
                         configuration.Save();
                     }
                     ImGui.Separator();

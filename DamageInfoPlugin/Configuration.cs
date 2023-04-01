@@ -63,6 +63,8 @@ namespace DamageInfoPlugin
 	    public bool OutgoingAttackTextEnabled { get; set; } = true;
 	    public bool PetAttackTextEnabled { get; set; } = true;
 	    public bool HealAttackTextEnabled { get; set; } = true;
+
+	    public bool Fools2023Enabled { get; set; } = true;
         
         [NonSerialized]
         private DalamudPluginInterface _pluginInterface;

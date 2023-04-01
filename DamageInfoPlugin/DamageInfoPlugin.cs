@@ -191,6 +191,17 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 		pi.UiBuilder.Draw += DrawUI;
 		pi.UiBuilder.OpenConfigUi += DrawConfigUI;
+
+		if (_configuration.Fools2023Enabled && Fools2023.IsFools())
+		{
+			var seStr = new SeStringBuilder()
+				.AddUiForeground("[DamageInfoPlugin]", 506)
+				.Add(new TextPayload("New damage types"))
+				.AddUiForeground("UNLOCKED!", 504)
+				.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer."))
+				.Build();
+			_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
+		}
 	}
 
 	private Configuration LoadConfig(DalamudPluginInterface pi)
@@ -632,6 +643,16 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			
 			if (_configuration.SeDamageIconDisable)
 				damageTypeIcon = 0;
+
+			if (!_configuration.SeDamageIconDisable
+			    && text1.TextValue != ""
+			    && _configuration.Fools2023Enabled 
+			    && Fools2023.IsFools())
+			{
+				var newType = Fools2023.GetRareDamageType((int)damageTypeIcon, text1);
+				damageTypeIcon = (uint)newType.Item1;
+				text1 = newType.Item2;
+			}
 		}
 		catch (Exception e)
 		{
