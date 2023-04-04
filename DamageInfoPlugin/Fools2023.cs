@@ -58,6 +58,7 @@ public class Fools2023Config
 
 public static class Fools2023
 {
+	private const string SettingsHeader = "April Fools 2023 (Rare Damage Types)";
 	private static readonly Random _r = new(Environment.TickCount);
 	private static readonly Dictionary<int, TextureWrap> _textures = new();
 	private static Configuration _configuration;
@@ -81,20 +82,29 @@ public static class Fools2023
 		_configuration.Save();
 	}
 
+	private static bool DrawConfigDisabled(bool failCondition, string tooltip)
+	{
+		if (failCondition)
+		{
+			ImGui.BeginDisabled(true);
+			ImGui.CollapsingHeader(SettingsHeader);
+			var hover = ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled);
+			ImGui.EndDisabled();
+			if (hover)
+			{
+				ImGui.SetTooltip(tooltip);
+			}
+		};
+		return failCondition;
+	}
+
 	public static void DrawConfig()
 	{
-		if (!_config.Unlocked) return;
-		
-		ImGui.BeginDisabled(_configuration.SeDamageIconDisable);
+		if (DrawConfigDisabled(!_config.Unlocked, "Unlock this feature by using the command '/dmginfo fools2023' in chat.")) return;
+		if (DrawConfigDisabled(_configuration.SeDamageIconDisable, "Enable vanilla damage icons under the Flytext category to use this feature.")) return;
+
 		if (ImGui.CollapsingHeader("April Fools 2023 (Rare Damage Types)"))
 		{
-			if (_configuration.SeDamageIconDisable)
-			{
-				ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudRed);
-				ImGui.TextWrapped("The Damage Icon display is not enabled. Disable it to use Rare Damage Types.");
-				ImGui.PopStyleColor();
-			}
-			
 			var foolsConfigValue = _config.Enabled;
 			var foolsFrequencyValue = _config.Frequency;
 
@@ -183,13 +193,13 @@ public static class Fools2023
 			ImGui.TextWrapped("QoLBar's Icon Browser (/qolicons) is recommended for finding icon IDs.");
 			ImGui.TextWrapped("Please note this 'feature' is in maintenance mode and will not have anything new added, but will be fixed in case of bugs.");
 		}
-		ImGui.EndDisabled();
 	}
 	
 	private static bool ShouldShowDamageType()
 	{
 		if (_configuration.SeDamageIconDisable
 		    || !_configuration.OutgoingAttackTextEnabled
+		    || !_config.Unlocked
 		    || !_config.Enabled
 		    || _config.DamageTypes.Count == 0)
 			return false;
