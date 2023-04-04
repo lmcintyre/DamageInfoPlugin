@@ -117,7 +117,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_clientState = clientState;
 		_targetManager = targetManager;
 		_chatGui = chatGui;
-			
+
 		_configuration = LoadConfig(pi);
 		_ui = new PluginUI(_configuration, this);
 		_actionToDamageTypeDict = new Dictionary<uint, DamageType>();
@@ -130,7 +130,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			bg = null,
 		};
 
-		cmdMgr.AddHandler(CommandName, new CommandInfo(OnCommand)
+		cmdMgr.AddHandler("/dmginfo", new CommandInfo(OnCommand)
 		{
 			HelpMessage = "Display the Damage Info configuration interface.",
 		});
@@ -163,7 +163,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 			var setFocusTargetCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 49 8B 47 20 4C 8B 6C 24");
 			_setFocusTargetCastBarHook = Hook<SetCastBarDelegate>.FromAddress(setFocusTargetCastBarFuncPtr, SetFocusTargetCastBarDetour);
-				
+
 			ftGui.FlyTextCreated += OnFlyTextCreated;
 		}
 		catch (Exception ex)
@@ -192,50 +192,33 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		pi.UiBuilder.Draw += DrawUI;
 		pi.UiBuilder.OpenConfigUi += DrawConfigUI;
 
-		Fools2023.SetConfiguration(_configuration);
-		if (_configuration.Fools2023Enabled && Fools2023.IsFools())
-		{
-			_clientState.Login += FoolsMessage;
-		}
-	}
-
-	private void FoolsMessage(object sender, EventArgs e)
-	{
-		var seStr = new SeStringBuilder()
-			.AddUiForeground("[DamageInfoPlugin]", 506)
-			.Add(new TextPayload(" New damage types"))
-			.AddUiForeground(" UNLOCKED! ", 504)
-			.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer. Note that damage icons must be enabled in Damage Info to see them."))
-			.Build();
-			
-		_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
-		_clientState.Login -= FoolsMessage;
+		Fools2023.Initialize(_configuration, dataMgr);
 	}
 
 	private Configuration LoadConfig(DalamudPluginInterface pi)
 	{
 		var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
-		if (config.Version == 0)
+		if (config.Version < 2)
 		{
-			config = new Configuration
-			{
-				PhysicalColor = config.PhysicalColor,
-				MagicColor = config.MagicColor,
-				DarknessColor = config.DarknessColor,
-				PhysicalBgColor = config.PhysicalBgColor,
-				MagicBgColor = config.MagicBgColor,
-				DarknessBgColor = config.DarknessBgColor,
-				PhysicalCastColor = config.PhysicalCastColor,
-				MagicCastColor = config.MagicCastColor,
-				DarknessCastColor = config.DarknessCastColor,
-				MainTargetCastBarColorEnabled = config.MainTargetCastBarColorEnabled,
-				FocusTargetCastBarColorEnabled = config.FocusTargetCastBarColorEnabled
-			};
+			config = new Configuration();
 		}
-		else if (config.Version == 1)
+		else if (config.Version == 2)
 		{
-			config.Version = 2;
-			config.PositionalColorInvert = false;
+			config.Version = 3;
+
+			config.PositionalMissColor = config.PositionalColor;
+			config.PositionalHitColor = config.PositionalColor;
+			
+			if (config.PositionalColorInvert)
+			{
+				config.PositionalMissColorEnabled = true;
+				config.PositionalHitColorEnabled = false;
+			}
+			else
+			{
+				config.PositionalMissColorEnabled = false;
+				config.PositionalHitColorEnabled = true;
+			}
 		}
 
 		config.Initialize(pi, this);
@@ -269,6 +252,18 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	private void OnCommand(string command, string args)
 	{
 		_ui.SettingsVisible = true;
+
+		if (args == "fools2023" && !_configuration.Fools2023Config.Unlocked)
+		{
+			Fools2023.Unlock();
+			var seStr = new SeStringBuilder()
+				.AddUiForeground("[DamageInfoPlugin]", 506)
+				.Add(new TextPayload(" New rare damage types"))
+				.AddUiForeground(" UNLOCKED! ", 504)
+				.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer. Note that damage icons must be enabled in Damage Info to see them."))
+				.Build();
+			_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
+		}
 	}
 
 	private void DrawUI()
@@ -603,7 +598,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			var isCharaAction = info.sourceId == charaId;
 			var isCharaTarget = info.targetId == charaId;
 
-			if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled || _configuration.PositionalColorEnabled))
+			if ((_configuration.IncomingColorEnabled || _configuration.OutgoingColorEnabled || _configuration.PositionalHitColorEnabled || _configuration.PositionalMissColorEnabled))
 			{
 				var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && _configuration.IncomingColorEnabled;
 				var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && _configuration.OutgoingColorEnabled;
@@ -611,15 +606,20 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 				// Large check - check that it's a character action, we shouldn't ignore the state, and that positionals are enabled
 				// then, check to see if we should color the success or the failure
-				var posCheck = isCharaAction && info.positionalState != PositionalState.Ignore && _configuration.PositionalColorEnabled
-				               && ((info.positionalState == PositionalState.Success && !_configuration.PositionalColorInvert) ||
-				                   (info.positionalState == PositionalState.Failure && _configuration.PositionalColorInvert));
+				var posCheck = isCharaAction && info.positionalState != PositionalState.Ignore;
 
 				if (incomingCheck || outgoingCheck || petCheck)
 					color = GetDamageColor(damageType);
 
 				if (posCheck)
-					color = ImGui.GetColorU32(_configuration.PositionalColor);
+				{
+					color = info.positionalState switch
+					{
+						PositionalState.Success when _configuration.PositionalHitColorEnabled => ImGui.GetColorU32(_configuration.PositionalHitColor),
+						PositionalState.Failure when _configuration.PositionalMissColorEnabled => ImGui.GetColorU32(_configuration.PositionalMissColor),
+						_ => color,
+					};
+				}
 			}
 
 			if (_configuration.SourceTextEnabled || _configuration.PetSourceTextEnabled || _configuration.HealSourceTextEnabled)
@@ -634,32 +634,50 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				}
 			}
 
+			if (_configuration.SeDamageIconDisable)
+				damageTypeIcon = 0;
+
+			if (info.type == ActionEffectType.Damage)
+				Fools2023.SetRareDamageType(ref damageTypeIcon, ref text1);
+			
 			// Attack text checks
 			if (!_configuration.IncomingAttackTextEnabled
 			    || !_configuration.OutgoingAttackTextEnabled
 			    || !_configuration.PetAttackTextEnabled
-			    || !_configuration.HealAttackTextEnabled)
+			    || !_configuration.HealAttackTextEnabled
+			    || _configuration.AnyPositionalTextEnabled())
 			{
 				var incomingCheck = !isCharaAction && isCharaTarget && !isHealingAction && !isPetAction && !_configuration.IncomingAttackTextEnabled;
 				var outgoingCheck = isCharaAction && !isCharaTarget && !isHealingAction && !isPetAction && !_configuration.OutgoingAttackTextEnabled;
 				var petCheck = !isCharaAction && !isCharaTarget && !isHealingAction && isPetAction && !_configuration.PetAttackTextEnabled;
 				var healCheck = isHealingAction && !isPetAction && !_configuration.HealAttackTextEnabled;
 
-				if (incomingCheck || outgoingCheck || petCheck || healCheck)
-					text1 = "";
-			}
-			
-			if (_configuration.SeDamageIconDisable)
-				damageTypeIcon = 0;
+				var hitCheck = _configuration.PositionalHitTextSettings.AnyEnabled() && info.positionalState == PositionalState.Success;
+				var missCheck = _configuration.PositionalMissTextSettings.AnyEnabled() && info.positionalState == PositionalState.Failure;
+				var posAnyCheck = hitCheck || missCheck;
 
-			if (!_configuration.SeDamageIconDisable
-			    && text1.TextValue != ""
-			    && _configuration.Fools2023Enabled 
-			    && Fools2023.IsFools())
-			{
-				var newType = Fools2023.GetRareDamageType((int)damageTypeIcon, text1);
-				damageTypeIcon = (uint)newType.Item1;
-				text1 = newType.Item2;
+				var posOverride = (_configuration.PositionalAttackTextOverrideEnabled && !_configuration.OutgoingAttackTextEnabled)
+				                  || _configuration.OutgoingAttackTextEnabled;
+				var posCheck = posAnyCheck && posOverride && info.positionalState != PositionalState.Ignore;
+
+				if (incomingCheck || petCheck || healCheck || (outgoingCheck && !posCheck))
+					text1 = "";
+
+				if (posCheck)
+				{
+					var payloads = new List<Payload>();
+					if (hitCheck && _configuration.PositionalHitTextSettings.IsPrefixEnabled())
+						payloads.Add(_configuration.PositionalHitTextSettings.PrefixPayload());
+					if (missCheck && _configuration.PositionalMissTextSettings.IsPrefixEnabled())
+						payloads.Add(_configuration.PositionalMissTextSettings.PrefixPayload());
+					payloads.AddRange(text1.Payloads);
+					if (hitCheck && _configuration.PositionalHitTextSettings.IsSuffixEnabled())
+						payloads.Add(_configuration.PositionalHitTextSettings.SuffixPayload());
+					if (missCheck && _configuration.PositionalMissTextSettings.IsSuffixEnabled())
+						payloads.Add(_configuration.PositionalMissTextSettings.SuffixPayload());
+					text1.Payloads.Clear();
+					text1.Payloads.AddRange(payloads);
+				}
 			}
 		}
 		catch (Exception e)
