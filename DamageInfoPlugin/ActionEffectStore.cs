@@ -118,7 +118,7 @@ public class ActionEffectStore
             return false;
 
         var effect = list.FirstOrDefault(x => x.value == value
-                                              && x.damageType == damageType
+                                              // && x.damageType == damageType
                                               && x.step == ActionStep.Screenlog
                                               && KindCheck(x, targetKind)
                                               && TargetCheck(x, charaId, petIds));

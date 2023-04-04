@@ -1,6 +1,7 @@
 ﻿using ImGuiNET;
 using System;
 using System.Numerics;
+using Dalamud.Interface;
 
 namespace DamageInfoPlugin
 {
@@ -51,7 +52,8 @@ namespace DamageInfoPlugin
                 var lPhys = configuration.PhysicalColor;
                 var lMag = configuration.MagicColor;
                 var lDark = configuration.DarknessColor;
-                var lPos = configuration.PositionalColor;
+                var lPosHit = configuration.PositionalHitColor;
+                var lPosMiss = configuration.PositionalMissColor;
                 var gPhys = configuration.PhysicalCastColor;
                 var gMag = configuration.MagicCastColor;
                 var gDark = configuration.DarknessCastColor;
@@ -67,10 +69,10 @@ namespace DamageInfoPlugin
                 var incomingColorConfigValue = configuration.IncomingColorEnabled;
                 var outgoingColorConfigValue = configuration.OutgoingColorEnabled;
                 var petColorConfigValue = configuration.PetColorEnabled;
-                var posColorConfigValue = configuration.PositionalColorEnabled;
-                var posColorInvertConfigValue = configuration.PositionalColorInvert;
+                var posColorHitConfigValue = configuration.PositionalHitColorEnabled;
+                var posColorMissConfigValue = configuration.PositionalMissColorEnabled;
                 var seDamageIconDisableValue = configuration.SeDamageIconDisable;
-                
+
                 var sourceTextConfigValue = configuration.SourceTextEnabled;
                 var petSourceTextConfigValue = configuration.PetSourceTextEnabled;
                 var healSourceTextConfigValue = configuration.HealSourceTextEnabled;
@@ -80,10 +82,21 @@ namespace DamageInfoPlugin
                 var petAttackTextConfigValue = configuration.PetAttackTextEnabled;
                 var healAttackTextConfigValue = configuration.HealAttackTextEnabled;
 
+                var posPrefixTextHitEnabled = configuration.PositionalHitTextSettings.PrefixEnabled;
+                var posPrefixTextMissEnabled = configuration.PositionalMissTextSettings.PrefixEnabled;
+                var posSuffixTextHitEnabled = configuration.PositionalHitTextSettings.SuffixEnabled;
+                var posSuffixTextMissEnabled = configuration.PositionalMissTextSettings.SuffixEnabled;
+                var posPrefixTextHit = configuration.PositionalHitTextSettings.Prefix;
+                var posPrefixTextMiss = configuration.PositionalMissTextSettings.Prefix;
+                var posSuffixTextHit = configuration.PositionalHitTextSettings.Suffix;
+                var posSuffixTextMiss = configuration.PositionalMissTextSettings.Suffix;
+                var posOverrideEnabled = configuration.PositionalAttackTextOverrideEnabled;
+
                 // computed state
-                var colorAllConfigValue = incomingColorConfigValue && outgoingColorConfigValue && petColorConfigValue && posColorConfigValue;
+                var colorAllConfigValue = incomingColorConfigValue && outgoingColorConfigValue && petColorConfigValue;
                 var sourceTextAllConfigValue = sourceTextConfigValue && petSourceTextConfigValue && healSourceTextConfigValue;
                 var attackTextAllConfigValue = incAttackTextConfigValue && outAttackTextConfigValue && petAttackTextConfigValue && healAttackTextConfigValue;
+                
 
                 if (ImGui.CollapsingHeader("Damage type information"))
                 {
@@ -103,7 +116,8 @@ namespace DamageInfoPlugin
 
                 if (ImGui.CollapsingHeader("Flytext"))
                 {
-                    ImGui.Columns(4, "FT Options", false);
+                    ImGui.Text("Flytext Options");
+                    ImGui.Columns(4, "dmginfoflytextoptions", false);
                     ImGui.NextColumn();
                     ImGui.Text("Color");
                     ImGui.NextColumn();
@@ -118,7 +132,6 @@ namespace DamageInfoPlugin
                         configuration.IncomingColorEnabled = colorAllConfigValue;
                         configuration.OutgoingColorEnabled = colorAllConfigValue;
                         configuration.PetColorEnabled = colorAllConfigValue;
-                        configuration.PositionalColorEnabled = colorAllConfigValue;
                         configuration.Save();
                     }
                     ImGui.NextColumn();
@@ -197,16 +210,6 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
                     ImGui.NextColumn();
-                    ImGui.Text("Positionals");
-                    ImGui.NextColumn();
-                    if (ImGui.Checkbox("##positionalcolor", ref posColorConfigValue))
-                    {
-                        configuration.PositionalColorEnabled = posColorConfigValue;
-                        configuration.Save();
-                    }
-                    ImGui.NextColumn();
-                    ImGui.NextColumn();
-                    ImGui.NextColumn();
                     ImGui.Text("Heals");
                     ImGui.NextColumn();
                     ImGui.NextColumn();
@@ -222,19 +225,12 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
                     ImGui.Columns(1, "FT Options");
-                    ImGui.Separator();
-                    ImGui.BeginDisabled(!posColorConfigValue);
-                    if (ImGui.Checkbox("Color positionals when missed instead of when hit", ref posColorInvertConfigValue))
-                    {
-                        configuration.PositionalColorInvert = posColorInvertConfigValue;
-                        configuration.Save();
-                    }
-                    ImGui.EndDisabled();
                     if (ImGui.Checkbox("Disable vanilla damage type icons", ref seDamageIconDisableValue))
                     {
                         configuration.SeDamageIconDisable = seDamageIconDisableValue;
                         configuration.Save();
                     }
+
                     ImGui.Separator();
                     ImGui.Text("Flytext Colors");
                     if (ImGui.ColorEdit4("Physical##flytext", ref lPhys))
@@ -252,12 +248,6 @@ namespace DamageInfoPlugin
                     if (ImGui.ColorEdit4("Unique##flytext", ref lDark))
                     {
                         configuration.DarknessColor = lDark;
-                        configuration.Save();
-                    }
-                    
-                    if (ImGui.ColorEdit4("Positionals##flytext", ref lPos))
-                    {
-                        configuration.PositionalColor = lPos;
                         configuration.Save();
                     }
 
@@ -300,6 +290,133 @@ namespace DamageInfoPlugin
                     }
                 }
 
+                if (ImGui.CollapsingHeader("Positionals"))
+                {
+                    ImGui.Text("Enable positional hit color");
+                    ImGui.SameLine();
+                    if (ImGui.Checkbox("##positionalcolorhit", ref posColorHitConfigValue))
+                    {
+                        configuration.PositionalHitColorEnabled = posColorHitConfigValue;
+                        configuration.Save();
+                    }
+                    ImGui.Text("Enable positional miss color");
+                    ImGui.SameLine();
+                    if (ImGui.Checkbox("##positionalcolormiss", ref posColorMissConfigValue))
+                    {
+                        configuration.PositionalMissColorEnabled = posColorMissConfigValue;
+                        configuration.Save();
+                    }
+                    ImGui.Separator();
+
+                    ImGui.TextUnformatted("Positional Color options");
+
+                    if (ImGui.ColorEdit4("Positional Hit##flytext", ref lPosHit))
+                    {
+                        configuration.PositionalHitColor = lPosHit;
+                        configuration.Save();
+                    }
+                    if (ImGui.ColorEdit4("Positional Miss##flytext", ref lPosMiss))
+                    {
+                        configuration.PositionalMissColor = lPosMiss;
+                        configuration.Save();
+                    }
+                    if (ImGui.Button("Copy Hit to Miss"))
+                    {
+                        configuration.PositionalMissColor = configuration.PositionalHitColor;
+                        configuration.Save();
+                    }
+                    ImGui.SameLine();
+                    if (ImGui.Button("Copy Miss to Hit"))
+                    {
+                        configuration.PositionalHitColor = configuration.PositionalMissColor;
+                        configuration.Save();
+                    }
+                    ImGui.Separator();
+                    ImGui.TextUnformatted("Positional Attack Text options");
+                    ImGui.Columns(3, "dmginfopositionaltextoptions", false);
+                    ImGui.NextColumn();
+                    ImGui.Text("Prefix");
+                    ImGui.NextColumn();
+                    ImGui.Text("Suffix");
+                    ImGui.NextColumn();
+                    ImGui.Text("Hit");
+                    ImGui.NextColumn();
+                    if (ImGui.Checkbox("##hitprefix", ref posPrefixTextHitEnabled))
+                    {
+                        configuration.PositionalHitTextSettings.PrefixEnabled = posPrefixTextHitEnabled;
+                        configuration.Save();
+                    }
+                    ImGui.NextColumn();
+                    if (ImGui.Checkbox("##hitsuffix", ref posSuffixTextHitEnabled))
+                    {
+                        configuration.PositionalHitTextSettings.SuffixEnabled = posSuffixTextHitEnabled;
+                        configuration.Save();
+                    }
+                    ImGui.NextColumn();
+                    ImGui.Text("Miss");
+                    ImGui.NextColumn();
+                    if (ImGui.Checkbox("##missprefix", ref posPrefixTextMissEnabled))
+                    {
+                        configuration.PositionalMissTextSettings.PrefixEnabled = posPrefixTextMissEnabled;
+                        configuration.Save();
+                    }
+                    ImGui.NextColumn();
+                    if (ImGui.Checkbox("##misssuffix", ref posSuffixTextMissEnabled))
+                    {
+                        configuration.PositionalMissTextSettings.SuffixEnabled = posSuffixTextMissEnabled;
+                        configuration.Save();
+                    }
+                    ImGui.Columns(1, "dmginfopositionaltextoptions", false);
+                    if (ImGui.Checkbox("Positional Text overrides Attack Text options", ref posOverrideEnabled))
+                    {
+                        configuration.PositionalAttackTextOverrideEnabled = posOverrideEnabled;
+                        configuration.Save();
+                    }
+                    if (posOverrideEnabled)
+                    {
+                        ImGui.TextWrapped("The Positional Action Text options will override the Action Text options for Positional Attacks. " +
+                                          "For example, if Action Text is disabled for outgoing damage, Positional Text will still show if you have " +
+                                          "any prefixes or suffixes enabled.");
+                    }
+                    else
+                    {
+                        ImGui.TextWrapped("The Positional Action Text options will not override the Action Text options for Positional Attacks. " +
+                                          "For example, if Action Text is disabled for outgoing damage, Positional Text will not show, even if you have " +
+                                          "any prefixes or suffixes enabled.");
+                    }
+                    ImGui.Separator();
+                    ImGui.TextUnformatted("Positional hit:");
+                    ImGui.PushItemWidth(ImGuiHelpers.GlobalScale * 120);
+                    ImGui.SameLine();
+                    if (ImGui.InputText("Prefix##positionalhittext", ref posPrefixTextHit, 16))
+                    {
+                        configuration.PositionalHitTextSettings.Prefix = posPrefixTextHit;
+                        configuration.Save();
+                    }
+                    ImGui.SameLine();
+                    if (ImGui.InputText("Suffix##positionalhittext", ref posSuffixTextHit, 16))
+                    {
+                        configuration.PositionalHitTextSettings.Suffix = posSuffixTextHit;
+                        configuration.Save();
+                    }
+                    ImGui.PopItemWidth();
+                    ImGui.TextUnformatted("Positional miss:");
+                    ImGui.PushItemWidth(ImGuiHelpers.GlobalScale * 120);
+                    ImGui.SameLine();
+                    if (ImGui.InputText("Prefix##positionalmisstext", ref posPrefixTextMiss, 16))
+                    {
+                        configuration.PositionalMissTextSettings.Prefix = posPrefixTextMiss;
+                        configuration.Save();
+                    }
+                    ImGui.SameLine();
+                    if (ImGui.InputText("Suffix##positionalmisstext", ref posSuffixTextMiss, 16))
+                    {
+                        configuration.PositionalMissTextSettings.Suffix = posSuffixTextMiss;
+                        configuration.Save();
+                    }
+                    ImGui.PopItemWidth();
+                }
+                
                 if (ImGui.CollapsingHeader("Castbars"))
                 {
                     ImGui.Text("Main target");
@@ -361,6 +478,8 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
                 }
+                
+                Fools2023.DrawConfig();
 
                 if (ImGui.CollapsingHeader("Debug"))
                 {
