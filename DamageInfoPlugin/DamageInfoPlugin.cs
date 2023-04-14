@@ -246,6 +246,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_actionToDamageTypeDict = null;
 
 		_ui.Dispose();
+		Fools2023.Dispose();
 		_cmdMgr.RemoveHandler(CommandName);
 	}
 		

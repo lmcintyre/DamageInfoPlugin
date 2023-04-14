@@ -74,6 +74,14 @@ public static class Fools2023
 		_config = configuration.Fools2023Config;
 		_dataManager = dataManager;
 	}
+
+	public static void Dispose()
+	{
+		foreach (var kv in _textures)
+		{
+			kv.Value.Dispose();
+		}
+	}
 	
 	public static void Unlock()
 	{
