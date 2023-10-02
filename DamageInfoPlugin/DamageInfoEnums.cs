@@ -75,6 +75,7 @@ public enum ActionStep
 public enum LogType
 {
     FlyText,
+    Sound,
     Castbar,
     ScreenLog,
     Effect,

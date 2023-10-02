@@ -1,17 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 using System.Threading.Tasks;
-using Dalamud.Data;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Dalamud.Interface;
-using Dalamud.Interface.Colors;
-using Dalamud.Logging;
+using Dalamud.Interface.Internal;
+using Dalamud.Interface.Utility;
 using ImGuiNET;
-using ImGuiScene;
-using Lumina.Data.Files;
 
 namespace DamageInfoPlugin;
 
@@ -60,19 +55,17 @@ public static class Fools2023
 {
 	private const string SettingsHeader = "April Fools 2023 (Rare Damage Types)";
 	private static readonly Random _r = new(Environment.TickCount);
-	private static readonly Dictionary<int, TextureWrap> _textures = new();
+	private static readonly Dictionary<int, IDalamudTextureWrap> _textures = new();
 	private static Configuration _configuration;
 	private static Fools2023Config _config;
-	private static DataManager _dataManager;
 
 	private static int _editIconId;
 	private static string _editName = "";
 
-	public static void Initialize(Configuration configuration, DataManager dataManager)
+	public static void Initialize(Configuration configuration)
 	{
 		_configuration = configuration;
 		_config = configuration.Fools2023Config;
-		_dataManager = dataManager;
 	}
 
 	public static void Dispose()
@@ -153,8 +146,8 @@ public static class Fools2023
 				{
 					Task.Run(() =>
 					{
-						PluginLog.Debug($"Loading icon {damageType.Key}");
-						_textures[damageType.Key] = _dataManager.GetImGuiTexture(GetIcon(damageType.Key));
+						DalamudApi.PluginLog.Debug($"Loading icon {damageType.Key}");
+						_textures[damageType.Key] = DalamudApi.TextureProvider.GetIcon((uint)damageType.Key);
 					});
 				}
 				else if (img != null)
@@ -233,14 +226,7 @@ public static class Fools2023
 		var pathHr = $"ui/icon/{(object)(iconId / 1000U):D3}000/{iconId:D6}_hr1.tex";
 		var path = $"ui/icon/{(object)(iconId / 1000U):D3}000/{iconId:D6}.tex";
 
-		return _dataManager.FileExists(pathHr) || _dataManager.FileExists(path);
+		return DalamudApi.DataManager.FileExists(pathHr) || DalamudApi.DataManager.FileExists(path);
 	}
 
-	public static TexFile GetIcon(int iconId)
-	{
-		var pathHr = $"ui/icon/{(object)(iconId / 1000U):D3}000/{iconId:D6}_hr1.tex";
-		var path = $"ui/icon/{(object)(iconId / 1000U):D3}000/{iconId:D6}.tex";
-
-		return _dataManager.GetFile<TexFile>(_dataManager.FileExists(pathHr) ? pathHr : path);
-	}
 }

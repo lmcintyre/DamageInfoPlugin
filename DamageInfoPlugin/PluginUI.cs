@@ -2,6 +2,7 @@
 using System;
 using System.Numerics;
 using Dalamud.Interface;
+using Dalamud.Interface.Utility;
 
 namespace DamageInfoPlugin
 {
@@ -92,12 +93,16 @@ namespace DamageInfoPlugin
                 var posSuffixTextMiss = configuration.PositionalMissTextSettings.Suffix;
                 var posOverrideEnabled = configuration.PositionalAttackTextOverrideEnabled;
 
+                var hitSoundEnabled = configuration.PositionalHitSoundSettings.Enabled;
+                var missSoundEnabled = configuration.PositionalMissSoundSettings.Enabled;
+                var hitSound = configuration.PositionalHitSoundSettings.SoundId;
+                var missSound = configuration.PositionalMissSoundSettings.SoundId;
+
                 // computed state
                 var colorAllConfigValue = incomingColorConfigValue && outgoingColorConfigValue && petColorConfigValue;
                 var sourceTextAllConfigValue = sourceTextConfigValue && petSourceTextConfigValue && healSourceTextConfigValue;
                 var attackTextAllConfigValue = incAttackTextConfigValue && outAttackTextConfigValue && petAttackTextConfigValue && healAttackTextConfigValue;
                 
-
                 if (ImGui.CollapsingHeader("Damage type information"))
                 {
                     ImGui.TextWrapped(
@@ -415,6 +420,47 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
                     ImGui.PopItemWidth();
+                    
+                    ImGui.TextUnformatted("Positional Sound options");
+                    ImGui.TextUnformatted("Note that sounds are the same as chat <se.X> sound effects.");
+                    
+                    ImGui.Text("Positional hit:");
+                    ImGui.SameLine();
+                    if (ImGui.Checkbox("Enabled##hitSound", ref hitSoundEnabled))
+                    {
+                        configuration.PositionalHitSoundSettings.Enabled = hitSoundEnabled;
+                        configuration.Save();
+                    }
+                    ImGui.SameLine();
+                    ImGui.Text("Sound ID:");
+                    ImGui.SameLine();
+                    ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
+                    if (ImGui.InputInt("##positionalhitsound", ref hitSound))
+                    {
+                        if (hitSound < 1) hitSound = 1;
+                        if (hitSound > 16) hitSound = 16;
+                        configuration.PositionalHitSoundSettings.SoundId = hitSound;
+                        configuration.Save();
+                    }
+                    
+                    ImGui.Text("Positional miss:");
+                    ImGui.SameLine();
+                    if (ImGui.Checkbox("Enabled##missSound", ref missSoundEnabled))
+                    {
+                        configuration.PositionalMissSoundSettings.Enabled = missSoundEnabled;
+                        configuration.Save();
+                    }
+                    ImGui.SameLine();
+                    ImGui.Text("Sound ID:");
+                    ImGui.SameLine();
+                    ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
+                    if (ImGui.InputInt("##positionalmisssound", ref missSound))
+                    {
+                        if (missSound < 1) missSound = 1;
+                        if (missSound > 16) missSound = 16;
+                        configuration.PositionalMissSoundSettings.SoundId = missSound;
+                        configuration.Save();
+                    }
                 }
                 
                 if (ImGui.CollapsingHeader("Castbars"))

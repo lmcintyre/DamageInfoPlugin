@@ -4,19 +4,13 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud;
-using Dalamud.Data;
-using Dalamud.Game;
-using Dalamud.Game.ClientState;
-using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Types;
-using Dalamud.Game.Gui;
 using Dalamud.Game.Gui.FlyText;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
-using Dalamud.IoC;
-using Dalamud.Logging;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
 using static DamageInfoPlugin.LogType;
@@ -43,14 +37,6 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private readonly Configuration _configuration;
 	private readonly PluginUI _ui;
-
-	private readonly GameGui _gameGui;
-	private readonly CommandManager _cmdMgr;
-	private readonly FlyTextGui _ftGui;
-	private readonly ObjectTable _objectTable;
-	private readonly ClientState _clientState;
-	private readonly TargetManager _targetManager;
-	private readonly ChatGui _chatGui;
 
 	private delegate void AddScreenLogDelegate(
 		Character* target,
@@ -97,28 +83,11 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		{25772, new HashSet<int> {28, 66}},             // Chaotic Spring
 	};
 
-	public DamageInfoPlugin(
-		[RequiredVersion("1.0")] GameGui gameGui,
-		[RequiredVersion("1.0")] FlyTextGui ftGui,
-		[RequiredVersion("1.0")] DalamudPluginInterface pi,
-		[RequiredVersion("1.0")] CommandManager cmdMgr,
-		[RequiredVersion("1.0")] DataManager dataMgr,
-		[RequiredVersion("1.0")] ObjectTable objectTable,
-		[RequiredVersion("1.0")] ClientState clientState,
-		[RequiredVersion("1.0")] TargetManager targetManager,
-		[RequiredVersion("1.0")] ChatGui chatGui,
-		[RequiredVersion("1.0")] SigScanner scanner
-	)
+	public DamageInfoPlugin(DalamudPluginInterface pi)
 	{
-		_gameGui = gameGui;
-		_ftGui = ftGui;
-		_cmdMgr = cmdMgr;
-		_objectTable = objectTable;
-		_clientState = clientState;
-		_targetManager = targetManager;
-		_chatGui = chatGui;
-
-		_configuration = LoadConfig(pi);
+		DalamudApi.Initialize(pi);
+		
+		_configuration = LoadConfig();
 		_ui = new PluginUI(_configuration, this);
 		_actionToDamageTypeDict = new Dictionary<uint, DamageType>();
 		_ignoredCastActions = new HashSet<uint>();
@@ -130,14 +99,14 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			bg = null,
 		};
 
-		cmdMgr.AddHandler("/dmginfo", new CommandInfo(OnCommand)
+		DalamudApi.CommandManager.AddHandler("/dmginfo", new CommandInfo(OnCommand)
 		{
 			HelpMessage = "Display the Damage Info configuration interface.",
 		});
 
 		try
 		{
-			var actionSheet = dataMgr.GetExcelSheet<Action>();
+			var actionSheet = DalamudApi.DataManager.GetExcelSheet<Action>();
 
 			if (actionSheet == null)
 				throw new NullReferenceException();
@@ -152,24 +121,24 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 					_ignoredCastActions.Add(row.ActionCategory.Row);
 			}
 
-			var receiveActionEffectFuncPtr = scanner.ScanText("40 55 53 57 41 54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 45 70");
-			_receiveActionEffectHook = Hook<ReceiveActionEffectDelegate>.FromAddress(receiveActionEffectFuncPtr, ReceiveActionEffect);
+			var receiveActionEffectFuncPtr = DalamudApi.SigScanner.ScanText("40 55 53 57 41 54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 45 70");
+			_receiveActionEffectHook = DalamudApi.Hooks.HookFromAddress<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, ReceiveActionEffect);
 
-			var addScreenLogPtr = scanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? 41 F6 87");
-			_addScreenLogHook = Hook<AddScreenLogDelegate>.FromAddress(addScreenLogPtr, AddScreenLogDetour);
+			var addScreenLogPtr = DalamudApi.SigScanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? 41 F6 87");
+			_addScreenLogHook = DalamudApi.Hooks.HookFromAddress<AddScreenLogDelegate>(addScreenLogPtr, AddScreenLogDetour);
 
-			var setCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 4C 8D 8F ?? ?? ?? ?? 4D 8B C6");
-			_setCastBarHook = Hook<SetCastBarDelegate>.FromAddress(setCastBarFuncPtr, SetCastBarDetour);
+			var setCastBarFuncPtr = DalamudApi.SigScanner.ScanText("E8 ?? ?? ?? ?? 4C 8D 8F ?? ?? ?? ?? 4D 8B C6");
+			_setCastBarHook = DalamudApi.Hooks.HookFromAddress<SetCastBarDelegate>(setCastBarFuncPtr, SetCastBarDetour);
 
-			var setFocusTargetCastBarFuncPtr = scanner.ScanText("E8 ?? ?? ?? ?? 49 8B 47 20 4C 8B 6C 24");
-			_setFocusTargetCastBarHook = Hook<SetCastBarDelegate>.FromAddress(setFocusTargetCastBarFuncPtr, SetFocusTargetCastBarDetour);
+			var setFocusTargetCastBarFuncPtr = DalamudApi.SigScanner.ScanText("E8 ?? ?? ?? ?? 49 8B 47 20 4C 8B 6C 24");
+			_setFocusTargetCastBarHook = DalamudApi.Hooks.HookFromAddress<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, SetFocusTargetCastBarDetour);
 
-			ftGui.FlyTextCreated += OnFlyTextCreated;
+			DalamudApi.FlyTextGui.FlyTextCreated += OnFlyTextCreated;
 		}
 		catch (Exception ex)
 		{
-			PluginLog.Error(ex, $"An error occurred loading DamageInfoPlugin.");
-			PluginLog.Error("Plugin will not be loaded.");
+			DalamudApi.PluginLog.Error(ex, $"An error occurred loading DamageInfoPlugin.");
+			DalamudApi.PluginLog.Error("Plugin will not be loaded.");
 
 			_addScreenLogHook?.Disable();
 			_addScreenLogHook?.Dispose();
@@ -179,7 +148,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			_setCastBarHook?.Dispose();
 			_setFocusTargetCastBarHook?.Disable();
 			_setFocusTargetCastBarHook?.Dispose();
-			cmdMgr.RemoveHandler(CommandName);
+			DalamudApi.CommandManager.RemoveHandler(CommandName);
 
 			throw;
 		}
@@ -189,15 +158,15 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_setCastBarHook.Enable();
 		_setFocusTargetCastBarHook.Enable();
 
-		pi.UiBuilder.Draw += DrawUI;
-		pi.UiBuilder.OpenConfigUi += DrawConfigUI;
+		DalamudApi.PluginInterface.UiBuilder.Draw += DrawUI;
+		DalamudApi.PluginInterface.UiBuilder.OpenConfigUi += DrawConfigUI;
 
-		Fools2023.Initialize(_configuration, dataMgr);
+		Fools2023.Initialize(_configuration);
 	}
 
-	private Configuration LoadConfig(DalamudPluginInterface pi)
+	private Configuration LoadConfig()
 	{
-		var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
+		var config = DalamudApi.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 		if (config.Version < 2)
 		{
 			config = new Configuration();
@@ -221,7 +190,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			}
 		}
 
-		config.Initialize(pi, this);
+		config.Initialize(this);
 		config.Save();
 		return config;
 	}
@@ -240,14 +209,14 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_setFocusTargetCastBarHook?.Disable();
 		_setFocusTargetCastBarHook?.Dispose();
 
-		_ftGui.FlyTextCreated -= OnFlyTextCreated;
+		DalamudApi.FlyTextGui.FlyTextCreated -= OnFlyTextCreated;
 
 		_actionStore = null;
 		_actionToDamageTypeDict = null;
 
 		_ui.Dispose();
 		Fools2023.Dispose();
-		_cmdMgr.RemoveHandler(CommandName);
+		DalamudApi.CommandManager.RemoveHandler(CommandName);
 	}
 		
 	private void OnCommand(string command, string args)
@@ -263,7 +232,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				.AddUiForeground(" UNLOCKED! ", 504)
 				.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer. Note that damage icons must be enabled in Damage Info to see them."))
 				.Build();
-			_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
+			DalamudApi.ChatGui.Print(new XivChatEntry() { Message = seStr });
 		}
 	}
 
@@ -280,7 +249,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 #region castbar
 	private CastbarInfo GetTargetInfoUiElements()
 	{
-		var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfo").ToPointer();
+		var unitBase = (AtkUnitBase*)DalamudApi.GameGui.GetAddonByName("_TargetInfo").ToPointer();
 
 		if (unitBase == null) return _nullCastbarInfo;
 
@@ -294,7 +263,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private CastbarInfo GetTargetInfoSplitUiElements()
 	{
-		var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_TargetInfoCastBar").ToPointer();
+		var unitBase = (AtkUnitBase*)DalamudApi.GameGui.GetAddonByName("_TargetInfoCastBar").ToPointer();
 
 		if (unitBase == null) return _nullCastbarInfo;
 
@@ -308,7 +277,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private CastbarInfo GetFocusTargetUiElements()
 	{
-		var unitBase = (AtkUnitBase*)_gameGui.GetAddonByName("_FocusTargetInfo").ToPointer();
+		var unitBase = (AtkUnitBase*)DalamudApi.GameGui.GetAddonByName("_FocusTargetInfo").ToPointer();
 
 		if (unitBase == null) return _nullCastbarInfo;
 
@@ -355,7 +324,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			toColor = splitInfo;
 
 		if (toColor != _nullCastbarInfo)
-			ColorCastBar(_targetManager.Target, toColor, _setCastBarHook, thisPtr, a2, a3, a4, a5);
+			ColorCastBar(DalamudApi.TargetManager.Target, toColor, _setCastBarHook, thisPtr, a2, a3, a4, a5);
 	}
 
 	private void SetFocusTargetCastBarDetour(nint thisPtr, nint a2, nint a3, nint a4, char a5)
@@ -370,7 +339,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 		if (thisPtr.ToPointer() != ftInfo.unitBase || !ftInfo.Valid()) return;
 
-		ColorCastBar(_targetManager.FocusTarget, ftInfo, _setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
+		ColorCastBar(DalamudApi.TargetManager.FocusTarget, ftInfo, _setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
 	}
 
 	private void ColorCastBar(GameObject target, CastbarInfo info, Hook<SetCastBarDelegate> hook, nint thisPtr, nint a2, nint a3, nint a4, char a5)
@@ -416,7 +385,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	{
 		var results = new List<uint>();
 		var charaId = GetCharacterActorId();
-		foreach (var obj in _objectTable)
+		foreach (var obj in DalamudApi.ObjectTable)
 		{
 			if (obj is not BattleNpc npc) continue;
 
@@ -432,12 +401,12 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private uint GetCharacterActorId()
 	{
-		return _clientState.LocalPlayer?.ObjectId ?? 0;
+		return DalamudApi.ClientState.LocalPlayer?.ObjectId ?? 0;
 	}
 
 	private SeString GetActorName(uint id)
 	{
-		return _objectTable.SearchById(id)?.Name ?? SeString.Empty;
+		return DalamudApi.ObjectTable.SearchById(id)?.Name ?? SeString.Empty;
 	}
 
 	private void ReceiveActionEffect(uint sourceId, Character* sourceCharacter, IntPtr pos, EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail)
@@ -506,7 +475,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		}
 		catch (Exception e)
 		{
-			PluginLog.Error(e, "An error has occurred in Damage Info.");
+			DalamudApi.PluginLog.Error(e, "An error has occurred in Damage Info.");
 		}
 
 		_receiveActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray, effectTail);
@@ -543,7 +512,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		}
 		catch (Exception e)
 		{
-			PluginLog.Error(e, "An error occurred in Damage Info.");
+			DalamudApi.PluginLog.Error(e, "An error occurred in Damage Info.");
 		}
 
 		_addScreenLogHook.Original(target, source, logKind, option, actionKind, actionId, val1, val2, serverAttackType, val4);
@@ -680,10 +649,20 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 					text1.Payloads.AddRange(payloads);
 				}
 			}
+
+			if (_configuration.AnyPositionalSoundEnabled())
+			{
+				var hitSettings = _configuration.PositionalHitSoundSettings;
+				var missSettings = _configuration.PositionalMissSoundSettings;
+				if (info.positionalState == PositionalState.Success && hitSettings.Enabled)
+					PlaySE(hitSettings.SoundId);
+				if (info.positionalState == PositionalState.Failure && missSettings.Enabled)
+					PlaySE(missSettings.SoundId);
+			}
 		}
 		catch (Exception e)
 		{
-			PluginLog.Error(e, "An error has occurred in Damage Info");
+			DalamudApi.PluginLog.Error(e, "An error has occurred in Damage Info");
 		}
 	}
 
@@ -694,7 +673,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		    (seDamageType == SeDamageType.Unique && dmgType != DamageType.Unique))
 		{
 			var warning = $"Encountered a damage type mismatch on {info.actionId}: SE says {seDamageType}, damage info says {dmgType}";
-			PluginLog.Information(warning);
+			DalamudApi.PluginLog.Information(warning);
 				
 #if DEBUG
 			var seStr = new SeStringBuilder()
@@ -702,8 +681,20 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				.Add(new TextPayload($" {warning}."))
 				.AddUiForeground(" Please report this in the Damage Info thread in the Goat Place discord!", 60)
 				.Build();
-			_chatGui.PrintChat(new XivChatEntry() { Message = seStr });
+			DalamudApi.ChatGui.Print(new XivChatEntry() { Message = seStr });
 #endif
+		}
+	}
+
+	private void PlaySE(int soundId)
+	{
+		try
+		{
+			UIModule.PlayChatSoundEffect((uint)soundId);
+		}
+		catch (ArgumentException e)
+		{
+			DebugLog(Sound, $"Failed to play sound {soundId}: {e.Message}");
 		}
 	}
 
@@ -714,7 +705,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 		if (name.Payloads.Count == 0) return originalText;
 
-		switch (_clientState.ClientLanguage)
+		switch (DalamudApi.ClientState.ClientLanguage)
 		{
 			case ClientLanguage.Japanese:
 				newPayloads.AddRange(name.Payloads);
@@ -747,7 +738,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	private void DebugLog(LogType type, string str)
 	{
 		if (_configuration.DebugLogEnabled)
-			PluginLog.Information($"[{type}] {str}");
+			DalamudApi.PluginLog.Information($"[{type}] {str}");
 	}
 
 	private uint GetDamageColor(DamageType type, uint fallback = 0xFF00008A)

@@ -33,6 +33,12 @@ public class PositionalTextSettings
 	public Payload PrefixPayload() => string.IsNullOrEmpty(Prefix) ? null : new TextPayload(Prefix);
 	public Payload SuffixPayload() => string.IsNullOrEmpty(Suffix) ? null : new TextPayload(Suffix);
 }
+
+public class PositionalSoundSettings
+{
+	public bool Enabled { get; set; } = false;
+	public int SoundId { get; set; } = 1;
+}
 	
 [Serializable]
 public class Configuration : IPluginConfiguration
@@ -105,30 +111,34 @@ public class Configuration : IPluginConfiguration
 	public PositionalTextSettings PositionalHitTextSettings { get; set; } = new();
 	public PositionalTextSettings PositionalMissTextSettings { get; set; } = new();
 	public bool PositionalAttackTextOverrideEnabled { get; set; } = false;
+	
+	public PositionalSoundSettings PositionalHitSoundSettings { get; set; } = new();
+	public PositionalSoundSettings PositionalMissSoundSettings { get; set; } = new();
 
 	public bool AnyPositionalTextEnabled()
 	{
 		return PositionalHitTextSettings.AnyEnabled() || PositionalMissTextSettings.AnyEnabled();
-	} 
+	}
+
+	public bool AnyPositionalSoundEnabled()
+	{
+		return PositionalHitSoundSettings.Enabled || PositionalMissSoundSettings.Enabled;
+	}
 	
 	public bool DebugLogEnabled { get; set; }
 	    
 	public Fools2023Config Fools2023Config { get; set; } = new();
 
 	[NonSerialized]
-	private DalamudPluginInterface _pluginInterface;
-
-	[NonSerialized]
 	private DamageInfoPlugin _dmgPlugin;
 
-	public void Initialize(DalamudPluginInterface pluginInterface, DamageInfoPlugin dmgPlugin)
+	public void Initialize(DamageInfoPlugin dmgPlugin)
 	{
-		_pluginInterface = pluginInterface;
 		_dmgPlugin = dmgPlugin;
 	}
 
 	public void Save()
 	{
-		_pluginInterface.SavePluginConfig(this);
+		DalamudApi.PluginInterface.SavePluginConfig(this);
 	}
 }

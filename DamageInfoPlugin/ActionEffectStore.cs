@@ -3,13 +3,12 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Game.Gui.FlyText;
-using Dalamud.Logging;
 
 namespace DamageInfoPlugin;
 
 public class ActionEffectStore
 {
-    private ulong CleanupInterval = 30000;
+    private const ulong CleanupInterval = 30000;
 
     private readonly ConcurrentDictionary<uint, List<ActionEffectInfo>> _store;
     private readonly Configuration _config;
@@ -148,6 +147,6 @@ public class ActionEffectStore
     private void StoreLog(string msg)
     {
         if (_config.DebugLogEnabled)
-            PluginLog.Debug($"[Store] {msg}");
+            DalamudApi.PluginLog.Debug($"[Store] {msg}");
     }
 }
