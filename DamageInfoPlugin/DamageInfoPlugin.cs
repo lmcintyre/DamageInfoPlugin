@@ -62,6 +62,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	private Dictionary<uint, DamageType> _actionToDamageTypeDict;
 	private readonly HashSet<uint> _ignoredCastActions;
 	private ActionEffectStore _actionStore;
+    private readonly Dictionary<uint, string> _petNicknamesDictionary;
 
 	// These are the skills' percentage potency increases sent by the server
 	// check research.csv for more info
@@ -90,7 +91,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_configuration = LoadConfig();
 		_ui = new PluginUI(_configuration, this);
 		_actionToDamageTypeDict = new Dictionary<uint, DamageType>();
-		_ignoredCastActions = new HashSet<uint>();
+        _petNicknamesDictionary = DalamudApi.PluginInterface.GetOrCreateData("PetRenamer.GameObjectRenameDict", () => new Dictionary<uint, string>());
 		_actionStore = new ActionEffectStore(_configuration);
 		_nullCastbarInfo = new CastbarInfo
 		{
@@ -217,7 +218,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_ui.Dispose();
 		Fools2023.Dispose();
 		DalamudApi.CommandManager.RemoveHandler(CommandName);
-	}
+        DalamudApi.PluginInterface.RelinquishData("PetRenamer.GameObjectRenameDict");
 		
 	private void OnCommand(string command, string args)
 	{
@@ -406,8 +407,9 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private SeString GetActorName(uint id)
 	{
-		return DalamudApi.ObjectTable.SearchById(id)?.Name ?? SeString.Empty;
-	}
+        if (_petNicknamesDictionary.TryGetValue(id, out var name)) return name;
+        else return DalamudApi.ObjectTable.SearchById(id)?.Name ?? SeString.Empty;
+    }
 
 	private void ReceiveActionEffect(uint sourceId, Character* sourceCharacter, IntPtr pos, EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail)
 	{
