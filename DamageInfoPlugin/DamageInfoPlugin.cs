@@ -218,7 +218,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_ui.Dispose();
 		Fools2023.Dispose();
 		DalamudApi.CommandManager.RemoveHandler(CommandName);
-        DalamudApi.PluginInterface.RelinquishData("PetRenamer.GameObjectRenameDict");
+		DalamudApi.PluginInterface.RelinquishData("PetRenamer.GameObjectRenameDict");
+	}
 		
 	private void OnCommand(string command, string args)
 	{
