@@ -92,7 +92,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_ui = new PluginUI(_configuration, this);
 		_actionToDamageTypeDict = new Dictionary<uint, DamageType>();
         _petNicknamesDictionary = DalamudApi.PluginInterface.GetOrCreateData("PetRenamer.GameObjectRenameDict", () => new Dictionary<uint, string>());
-		_actionStore = new ActionEffectStore(_configuration);
+		_ignoredCastActions = new HashSet<uint>();
+        _actionStore = new ActionEffectStore(_configuration);
 		_nullCastbarInfo = new CastbarInfo
 		{
 			unitBase = null,
