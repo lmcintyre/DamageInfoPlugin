@@ -16,6 +16,7 @@ using ImGuiNET;
 using static DamageInfoPlugin.LogType;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 using Character = FFXIVClientStructs.FFXIV.Client.Game.Character.Character;
+using DObjectKind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind;
 
 namespace DamageInfoPlugin;
 
@@ -409,8 +410,10 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private SeString GetActorName(uint id)
 	{
-        if (_petNicknamesDictionary.TryGetValue(id, out var name)) return name;
-        else return DalamudApi.ObjectTable.SearchById(id)?.Name ?? SeString.Empty;
+		var dGameObject = DalamudApi.ObjectTable.SearchById(id);
+		if (dGameObject == null) return SeString.Empty;
+		if (dGameObject.ObjectKind == DObjectKind.BattleNpc && _petNicknamesDictionary.TryGetValue(id, out var name)) return name;
+		return dGameObject.Name;
     }
 
 	private void ReceiveActionEffect(uint sourceId, Character* sourceCharacter, IntPtr pos, EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail)
