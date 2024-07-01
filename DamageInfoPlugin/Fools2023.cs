@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Dalamud.Interface.Internal;
+using Dalamud.Interface.Textures;
 using Dalamud.Interface.Utility;
 using ImGuiNET;
 
@@ -55,7 +55,7 @@ public static class Fools2023
 {
 	private const string SettingsHeader = "April Fools 2023 (Rare Damage Types)";
 	private static readonly Random _r = new(Environment.TickCount);
-	private static readonly Dictionary<int, IDalamudTextureWrap> _textures = new();
+	private static readonly Dictionary<int, ISharedImmediateTexture> _textures = new();
 	private static Configuration _configuration;
 	private static Fools2023Config _config;
 
@@ -70,10 +70,7 @@ public static class Fools2023
 
 	public static void Dispose()
 	{
-		foreach (var kv in _textures)
-		{
-			kv.Value.Dispose();
-		}
+		
 	}
 	
 	public static void Unlock()
@@ -147,13 +144,13 @@ public static class Fools2023
 					Task.Run(() =>
 					{
 						DalamudApi.PluginLog.Debug($"Loading icon {damageType.Key}");
-						_textures[damageType.Key] = DalamudApi.TextureProvider.GetIcon((uint)damageType.Key);
+						_textures[damageType.Key] = DalamudApi.TextureProvider.GetFromGameIcon((uint)damageType.Key);
 					});
 				}
 				else if (img != null)
 				{
 					ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 8 * ImGuiHelpers.GlobalScale);
-					ImGui.Image(img.ImGuiHandle, ImGuiHelpers.ScaledVector2(32, 32));
+					ImGui.Image(img.GetWrapOrEmpty().ImGuiHandle, ImGuiHelpers.ScaledVector2(32, 32));
 					ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8 * ImGuiHelpers.GlobalScale);
 				}
 				ImGui.NextColumn();

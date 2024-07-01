@@ -3,7 +3,7 @@ using Dalamud.Plugin;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using Dalamud;
+using Dalamud.Game;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Gui.FlyText;
 using Dalamud.Game.Text;
@@ -60,6 +60,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private readonly CastbarInfo _nullCastbarInfo;
 	private Dictionary<uint, DamageType> _actionToDamageTypeDict;
+	private Dictionary<uint, string> _actionToNameDict;
 	private readonly HashSet<uint> _ignoredCastActions;
 	private ActionEffectStore _actionStore;
 
@@ -67,29 +68,50 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	// check research.csv for more info
 	private readonly Dictionary<int, HashSet<int>> _positionalData = new()
 	{
-		{   56, new HashSet<int> {19, 21}},             // Snap Punch
-		{   66, new HashSet<int> {46, 60}},             // Demolish
-		// {   79, new HashSet<int> {}},                // Heavy Thrust
-		{   88, new HashSet<int> {28, 61}},             // Chaos Thrust
-		{ 2255, new HashSet<int> {30, 37, 68, 75}},     // Aeolian Edge
-		{ 2258, new HashSet<int> {25}},                 // Trick Attack
-		{ 3554, new HashSet<int> {10, 13}},             // Fang and Claw
-		{ 3556, new HashSet<int> {10, 13}},             // Wheeling Thrust
-		{ 3563, new HashSet<int> {30, 37, 66, 73}},     // Armor Crush
-		{ 7481, new HashSet<int> {29, 33, 68, 72}},     // Gekko (rear)
-		{ 7482, new HashSet<int> {29, 33, 68, 72}},     // Kasha (flank)
-		{24382, new HashSet<int> {11, 13}},             // Gibbet (flank)
-		{24383, new HashSet<int> {11, 13}},             // Gallows (rear)
-		{25772, new HashSet<int> {28, 66}},             // Chaotic Spring
+		{   56, [13] },					// Snap Punch
+		{   66, [16] },					// Demolish
+		{   88, [28, 61] },             // Chaos Thrust
+		{ 2255, [30, 63] },				// Aeolian Edge
+		{ 2258, [25] },                 // Trick Attack
+		{ 3554, [28, 66] },             // Fang and Claw
+		{ 3556, [28, 66] },             // Wheeling Thrust
+		{ 3563, [30, 65] },				// Armor Crush
+		{ 7481, [29, 33, 68, 72] },     // Gekko (rear)
+		{ 7482, [29, 33, 68, 72] },     // Kasha (flank)
+		{24382, [11, 13] },             // Gibbet (flank)
+		{24383, [11, 13] },             // Gallows (rear)
+		{25772, [28, 66] },             // Chaotic Spring
+		
+		{34610, [52, 54, 66, 70] },				// Flanksting Strike 
+		{34611, [52, 54, 66, 70] },				// Flanksbane Fang 
+		{34612, [52, 54, 66, 70] },				// Hindsting Strike 
+		{34613, [52, 54, 66, 70] },				// Hindsbane Fang 
+		
+		
+		{34621, [9] },					// Hunter's Coil
+		{34622, [9] },					// Swiftskin's Coil
 	};
+	
+	private readonly HashSet<int> _watchedSkills = [
+		56, 66, 88, 2255, 2258, 3554, 3556, 3563, 7481, 7482, 24382, 24383, 25772,
+		34610,
+		34611,
+		34612,
+		34613,
+		34621,
+		34622,
+		
+		36947, // Pouncing Couerl
+	];
 
-	public DamageInfoPlugin(DalamudPluginInterface pi)
+	public DamageInfoPlugin(IDalamudPluginInterface pi)
 	{
 		DalamudApi.Initialize(pi);
 		
 		_configuration = LoadConfig();
 		_ui = new PluginUI(_configuration, this);
 		_actionToDamageTypeDict = new Dictionary<uint, DamageType>();
+		_actionToNameDict = new Dictionary<uint, string>();
 		_ignoredCastActions = new HashSet<uint>();
 		_actionStore = new ActionEffectStore(_configuration);
 		_nullCastbarInfo = new CastbarInfo
@@ -114,23 +136,25 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			foreach (var row in actionSheet)
 			{
 				var dmgType = ((AttackType)row.AttackType.Row).ToDamageType();
-
+				var name = row.Name;
+				
 				_actionToDamageTypeDict.Add(row.RowId, dmgType);
+				_actionToNameDict.Add(row.RowId, name.ToString());
 
 				if (row.ActionCategory.Row is > 4 and < 11)
 					_ignoredCastActions.Add(row.ActionCategory.Row);
 			}
 
-			var receiveActionEffectFuncPtr = DalamudApi.SigScanner.ScanText("40 55 53 57 41 54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 45 70");
+			var receiveActionEffectFuncPtr = DalamudApi.SigScanner.ScanText("40 55 56 57 41 54 41 55 41 56 48 8D AC 24");
 			_receiveActionEffectHook = DalamudApi.Hooks.HookFromAddress<ReceiveActionEffectDelegate>(receiveActionEffectFuncPtr, ReceiveActionEffect);
 
-			var addScreenLogPtr = DalamudApi.SigScanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? 41 F6 87");
+			var addScreenLogPtr = DalamudApi.SigScanner.ScanText("E8 ?? ?? ?? ?? BF ?? ?? ?? ?? EB 39");
 			_addScreenLogHook = DalamudApi.Hooks.HookFromAddress<AddScreenLogDelegate>(addScreenLogPtr, AddScreenLogDetour);
 
 			var setCastBarFuncPtr = DalamudApi.SigScanner.ScanText("E8 ?? ?? ?? ?? 4C 8D 8F ?? ?? ?? ?? 4D 8B C6");
 			_setCastBarHook = DalamudApi.Hooks.HookFromAddress<SetCastBarDelegate>(setCastBarFuncPtr, SetCastBarDetour);
 
-			var setFocusTargetCastBarFuncPtr = DalamudApi.SigScanner.ScanText("E8 ?? ?? ?? ?? 49 8B 47 20 4C 8B 6C 24");
+			var setFocusTargetCastBarFuncPtr = DalamudApi.SigScanner.ScanText("40 56 41 54 41 55 41 57 48 83 EC 78");
 			_setFocusTargetCastBarHook = DalamudApi.Hooks.HookFromAddress<SetCastBarDelegate>(setFocusTargetCastBarFuncPtr, SetFocusTargetCastBarDetour);
 
 			DalamudApi.FlyTextGui.FlyTextCreated += OnFlyTextCreated;
@@ -342,9 +366,9 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		ColorCastBar(DalamudApi.TargetManager.FocusTarget, ftInfo, _setFocusTargetCastBarHook, thisPtr, a2, a3, a4, a5);
 	}
 
-	private void ColorCastBar(GameObject target, CastbarInfo info, Hook<SetCastBarDelegate> hook, nint thisPtr, nint a2, nint a3, nint a4, char a5)
+	private void ColorCastBar(IGameObject target, CastbarInfo info, Hook<SetCastBarDelegate> hook, nint thisPtr, nint a2, nint a3, nint a4, char a5)
 	{
-		if (target == null || target is not BattleChara battleTarget)
+		if (target == null || target is not IBattleChara battleTarget)
 		{
 			hook.Original(thisPtr, a2, a3, a4, a5);
 			return;
@@ -387,13 +411,13 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		var charaId = GetCharacterActorId();
 		foreach (var obj in DalamudApi.ObjectTable)
 		{
-			if (obj is not BattleNpc npc) continue;
+			if (obj is not IBattleNpc npc) continue;
 
 			var actPtr = npc.Address;
 			if (actPtr == IntPtr.Zero) continue;
 
 			if (npc.OwnerId == charaId)
-				results.Add(npc.ObjectId);
+				results.Add(npc.EntityId);
 		}
 
 		return results;
@@ -401,7 +425,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private uint GetCharacterActorId()
 	{
-		return DalamudApi.ClientState.LocalPlayer?.ObjectId ?? 0;
+		return DalamudApi.ClientState.LocalPlayer?.EntityId ?? 0;
 	}
 
 	private SeString GetActorName(uint id)
@@ -415,7 +439,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		{
 			_actionStore.Cleanup();
 
-			DebugLog(Effect, $"--- source actor: {sourceCharacter->GameObject.ObjectID}, action id {effectHeader->ActionId}, anim id {effectHeader->AnimationId} numTargets: {effectHeader->TargetCount} ---");
+			DebugLog(Effect, $"--- source actor: {sourceCharacter->GameObject.EntityId}, action id {effectHeader->ActionId}, anim id {effectHeader->AnimationId} numTargets: {effectHeader->TargetCount} ---");
 
 			// TODO: Reimplement opcode logging, if it's even useful. Original code follows
 			// ushort op = *((ushort*) effectHeader.ToPointer() - 0x7);
@@ -443,7 +467,21 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 						if (actionPosData.Contains(effectArray[i].param2))
 							positionalState = PositionalState.Success;
 			}
-
+			
+			if (_watchedSkills.Contains(effectHeader->AnimationId))
+			{
+				for (int i = 0; i < entryCount; i++)
+					if (effectArray[i].type == ActionEffectType.Damage)
+					{
+						var id = effectHeader->AnimationId;
+						var name = id.ToString();
+						if (_actionToNameDict.TryGetValue(id, out var sheetName))
+							name = $"{sheetName} [{name}]";
+						PrintChat($"Skill {name} param2: {effectArray[i].param2}");
+					}
+						
+			}
+			
 			for (int i = 0; i < entryCount; i++)
 			{
 				if (effectArray[i].type == ActionEffectType.Nothing) continue;
@@ -468,6 +506,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 					targetId = target,
 					value = dmg,
 					positionalState = positionalState,
+					// positionalPct = param2,
 				};
 
 				_actionStore.AddEffect(newEffect);
@@ -495,8 +534,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	{
 		try
 		{
-			var targetId = target->GameObject.ObjectID;
-			var sourceId = source->GameObject.ObjectID;
+			var targetId = target->GameObject.EntityId;
+			var sourceId = source->GameObject.EntityId;
 
 			if (_configuration.DebugLogEnabled)
 			{
@@ -541,6 +580,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 				DebugLog(FlyText, $"flytext created: kind: {ftKind} ({(int)kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
 				DebugLog(FlyText, $"text1: {str1} | text2: {str2}");
+				DalamudApi.ChatGui.Print(new XivChatEntry { Message = $""});
 			}
 
 			var charaId = GetCharacterActorId();
@@ -684,6 +724,17 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			DalamudApi.ChatGui.Print(new XivChatEntry() { Message = seStr });
 #endif
 		}
+	}
+	
+	private void PrintChat(string message)
+	{
+#if DEBUG
+			var seStr = new SeStringBuilder()
+				.AddUiForeground("[DamageInfoPlugin]", 506)
+				.Add(new TextPayload($" {message}."))
+				.Build();
+			DalamudApi.ChatGui.Print(new XivChatEntry { Message = seStr });
+#endif
 	}
 
 	private void PlaySE(int soundId)

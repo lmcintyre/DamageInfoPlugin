@@ -8,7 +8,7 @@ namespace DamageInfoPlugin;
 
 public class DalamudApi
 {
-    public static void Initialize(DalamudPluginInterface pluginInterface) => pluginInterface.Create<DalamudApi>();
+    public static void Initialize(IDalamudPluginInterface pluginInterface) => pluginInterface.Create<DalamudApi>();
 
     // [PluginService] public static IAetheryteList AetheryteList { get; private set; } = null;
     // [PluginService] public static IBuddyList BuddyList { get; private set; } = null;    
@@ -16,7 +16,7 @@ public class DalamudApi
     [PluginService] public static IClientState ClientState { get; private set; } = null;
     [PluginService] public static ICommandManager CommandManager { get; private set; } = null;
     // [PluginService] public static ICondition Condition { get; private set; } = null;
-    [PluginService] public static DalamudPluginInterface PluginInterface { get; private set; } = null;
+    [PluginService] public static IDalamudPluginInterface PluginInterface { get; private set; } = null;
     [PluginService] public static IDataManager DataManager { get; private set; } = null;
     // [PluginService] public static IDtrBar DtrBar { get; private set; } = null;
     // [PluginService] public static IFateTable FateTable { get; private set; } = null;
