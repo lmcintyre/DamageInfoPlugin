@@ -16,6 +16,7 @@ using ImGuiNET;
 using static DamageInfoPlugin.LogType;
 using Action = Lumina.Excel.GeneratedSheets.Action;
 using Character = FFXIVClientStructs.FFXIV.Client.Game.Character.Character;
+using DObjectKind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind;
 
 namespace DamageInfoPlugin;
 
@@ -63,6 +64,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	private Dictionary<uint, string> _actionToNameDict;
 	private readonly HashSet<uint> _ignoredCastActions;
 	private ActionEffectStore _actionStore;
+    private readonly Dictionary<uint, string> _petNicknamesDictionary;
 
 	// These are the skills' percentage potency increases sent by the server
 	// check research.csv for more info
@@ -111,9 +113,10 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_configuration = LoadConfig();
 		_ui = new PluginUI(_configuration, this);
 		_actionToDamageTypeDict = new Dictionary<uint, DamageType>();
+        _petNicknamesDictionary = DalamudApi.PluginInterface.GetOrCreateData("PetRenamer.GameObjectRenameDict", () => new Dictionary<uint, string>());
 		_actionToNameDict = new Dictionary<uint, string>();
 		_ignoredCastActions = new HashSet<uint>();
-		_actionStore = new ActionEffectStore(_configuration);
+        _actionStore = new ActionEffectStore(_configuration);
 		_nullCastbarInfo = new CastbarInfo
 		{
 			unitBase = null,
@@ -241,6 +244,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_ui.Dispose();
 		Fools2023.Dispose();
 		DalamudApi.CommandManager.RemoveHandler(CommandName);
+		DalamudApi.PluginInterface.RelinquishData("PetRenamer.GameObjectRenameDict");
 	}
 		
 	private void OnCommand(string command, string args)
@@ -430,8 +434,11 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 	private SeString GetActorName(uint id)
 	{
-		return DalamudApi.ObjectTable.SearchById(id)?.Name ?? SeString.Empty;
-	}
+		var dGameObject = DalamudApi.ObjectTable.SearchById(id);
+		if (dGameObject == null) return SeString.Empty;
+		if (dGameObject.ObjectKind == DObjectKind.BattleNpc && _petNicknamesDictionary.TryGetValue(id, out var name)) return name;
+		return dGameObject.Name;
+    }
 
 	private void ReceiveActionEffect(uint sourceId, Character* sourceCharacter, IntPtr pos, EffectHeader* effectHeader, EffectEntry* effectArray, ulong* effectTail)
 	{
