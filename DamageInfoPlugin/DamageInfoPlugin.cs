@@ -71,7 +71,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		{   56, [13] },					// Snap Punch
 		{   66, [16] },					// Demolish
 		{   88, [28, 61] },             // Chaos Thrust
-		{ 2255, [30, 63] },				// Aeolian Edge
+		{ 2255, [30, 63, 70] },			// Aeolian Edge
 		{ 2258, [25] },                 // Trick Attack
 		{ 3554, [28, 66] },             // Fang and Claw
 		{ 3556, [28, 66] },             // Wheeling Thrust
@@ -471,15 +471,14 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			if (_watchedSkills.Contains(effectHeader->AnimationId))
 			{
 				for (int i = 0; i < entryCount; i++)
-					if (effectArray[i].type == ActionEffectType.Damage)
+					if (effectArray[i].type == ActionEffectType.Damage && sourceId == GetCharacterActorId())
 					{
 						var id = effectHeader->AnimationId;
 						var name = id.ToString();
 						if (_actionToNameDict.TryGetValue(id, out var sheetName))
 							name = $"{sheetName} [{name}]";
-						PrintChat($"Skill {name} param2: {effectArray[i].param2}");
+						PrintChat($"Skill {name} param2: {effectArray[i].param2} pos: {positionalState}");
 					}
-						
 			}
 			
 			for (int i = 0; i < entryCount; i++)
