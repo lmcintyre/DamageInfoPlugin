@@ -61,4 +61,11 @@
     
     <PackageReference Include="DalamudPackager" Version="2.1.13" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ContentWithTargetPath Include="Data\positionals.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>positionals.csv</TargetPath>
+    </ContentWithTargetPath>
+  </ItemGroup>
 </Project>
