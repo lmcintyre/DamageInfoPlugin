@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <DalamudLibPath>/Users/liam/Library/Application Support/XIV on Mac/dalamud/Hooks/dev/</DalamudLibPath>
+    <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
     <PluginVersion>2.4.0.0</PluginVersion>
     <Nullable>enable</Nullable>
   </PropertyGroup>
