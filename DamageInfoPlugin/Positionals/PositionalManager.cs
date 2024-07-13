@@ -9,9 +9,10 @@ namespace DamageInfoPlugin.Positionals;
 public class PositionalManager
 {
     private const string SheetUrl = "https://docs.google.com/spreadsheets/d/1UchGyajO-AG6gQwXQT1bsb3sh2ucwOU_vuqT8FRR8Ac/gviz/tq?tqx=out:csv&sheet=main1";
+    private readonly string _filePath = Path.Combine(DalamudApi.PluginInterface.AssemblyLocation.DirectoryName!, "positionals.csv");
+    
     private readonly HttpClient _client;
-
-    private Dictionary<int, PositionalAction> _actionStore;
+    private readonly Dictionary<int, PositionalAction> _actionStore;
     
     public PositionalManager()
     {
@@ -30,15 +31,16 @@ public class PositionalManager
     private void Get()
     {
         var text = _client.GetAsync(SheetUrl).Result.Content.ReadAsStringAsync().Result;
-        if (!File.Exists("positionals.csv") || File.ReadAllText("positionals.csv") != text)
+        if (!File.Exists(_filePath) || File.ReadAllText(_filePath) != text)
         {
-            File.WriteAllText("positionals.csv", text);
+            File.WriteAllText(_filePath, text);
         }
     }
 
     private void Load()
     {
-        using var reader = new StreamReader("positionals.csv");
+        _actionStore.Clear();
+        using var reader = new StreamReader(_filePath);
         using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
 
         foreach (var record in csv.GetRecords<PositionalRecord>())
