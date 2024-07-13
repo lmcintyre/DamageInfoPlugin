@@ -67,39 +67,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	private ActionEffectStore _actionStore;
     private readonly Dictionary<uint, string> _petNicknamesDictionary;
 
-    private PositionalManager _posManager;
-
-	// These are the skills' percentage potency increases sent by the server
-	// check research.csv for more info
-	private readonly Dictionary<int, HashSet<int>> _positionalData = new()
-	{
-		{   56, [13] },					// Snap Punch
-		{   66, [16] },					// Demolish
-		{   88, [28, 61] },             // Chaos Thrust
-		{ 2255, [30, 63, 70] },			// Aeolian Edge
-		{ 2258, [25] },                 // Trick Attack
-		{ 3554, [28, 66] },             // Fang and Claw
-		{ 3556, [28, 66] },             // Wheeling Thrust
-		{ 3563, [30, 65] },				// Armor Crush
-		{ 7481, [29, 33, 68, 72] },     // Gekko (rear)
-		{ 7482, [29, 33, 68, 72] },     // Kasha (flank)
-		{24382, [11, 13] },             // Gibbet (flank)
-		{24383, [11, 13] },             // Gallows (rear)
-		{25772, [28, 66] },             // Chaotic Spring
-		
-		{34610, [52, 54, 66, 70] },				// Flanksting Strike 
-		{34611, [52, 54, 66, 70] },				// Flanksbane Fang 
-		{34612, [52, 54, 66, 70] },				// Hindsting Strike 
-		{34613, [52, 54, 66, 70] },				// Hindsbane Fang 
-		
-		{34621, [9] },					// Hunter's Coil
-		{34622, [9] },					// Swiftskin's Coil
-	};
-	
-	private readonly HashSet<int> _positionalSkills = [
-		56, 66, 79, 88, 2255, 2258, 3554, 3556, 3563, 7481, 7482, 24382, 24383,
-		25772, 34610, 34611, 34612, 34613, 34621, 34622, 36947, 36970, 36971,
-	];
+    private readonly PositionalManager _posManager;
 
 	public DamageInfoPlugin(IDalamudPluginInterface pi)
 	{
@@ -245,8 +213,6 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		
 	private void OnCommand(string command, string args)
 	{
-		_ui.SettingsVisible = true;
-
 		if (args == "fools2023" && !_configuration.Fools2023Config.Unlocked)
 		{
 			Fools2023.Unlock();
@@ -257,12 +223,16 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer. Note that damage icons must be enabled in Damage Info to see them."))
 				.Build();
 			DalamudApi.ChatGui.Print(new XivChatEntry() { Message = seStr });
+			return;
 		}
 
 		if (args == "posload")
 		{
 			_posManager.Reset();
+			return;
 		}
+		
+		_ui.SettingsVisible = true;
 	}
 
 	private void DrawUI()
@@ -467,7 +437,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			// Check if we have data for this action ID.
 			// Then we can check if the p2 is in the expected value set for positional success.
 			var positionalState = PositionalState.Ignore;
-			var isPositional = _positionalSkills.Contains(effectHeader->AnimationId);
+			var isPositional = _posManager.IsPositional(effectHeader->AnimationId);
 			if (isPositional)
 			{
 				positionalState = PositionalState.Failure;

@@ -78,4 +78,9 @@ public class PositionalManager
         if (!_actionStore.TryGetValue(actionId, out var action)) return null;
         return action.Positionals.GetValueOrDefault(percent);
     }
+
+    public bool IsPositional(int actionId)
+    {
+        return _actionStore.ContainsKey(actionId);
+    }
 }
