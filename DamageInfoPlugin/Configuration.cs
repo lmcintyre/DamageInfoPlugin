@@ -126,6 +126,7 @@ public class Configuration : IPluginConfiguration
 	}
 	
 	public bool DebugLogEnabled { get; set; }
+	public bool PositionalLogEnabled { get; set; }
 	    
 	public Fools2023Config Fools2023Config { get; set; } = new();
 

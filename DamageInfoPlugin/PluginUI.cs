@@ -66,6 +66,7 @@ namespace DamageInfoPlugin
                 var ftCastBarConfigValue = configuration.FocusTargetCastBarColorEnabled;
                 
                 var debugLogConfigValue = configuration.DebugLogEnabled;
+                var positionalLogConfigValue = configuration.PositionalLogEnabled;
                 
                 var incomingColorConfigValue = configuration.IncomingColorEnabled;
                 var outgoingColorConfigValue = configuration.OutgoingColorEnabled;
@@ -532,6 +533,12 @@ namespace DamageInfoPlugin
                     if (ImGui.Checkbox("Debug Log Enabled", ref debugLogConfigValue))
                     {
                         configuration.DebugLogEnabled = debugLogConfigValue;
+                        configuration.Save();
+                    }
+                    
+                    if (ImGui.Checkbox("Positional Log Enabled", ref positionalLogConfigValue))
+                    {
+                        configuration.PositionalLogEnabled = positionalLogConfigValue;
                         configuration.Save();
                     }
                 }

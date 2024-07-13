@@ -10,6 +10,7 @@ using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
+using DamageInfoPlugin.Positionals;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using ImGuiNET;
@@ -66,6 +67,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	private ActionEffectStore _actionStore;
     private readonly Dictionary<uint, string> _petNicknamesDictionary;
 
+    private PositionalManager _posManager;
+
 	// These are the skills' percentage potency increases sent by the server
 	// check research.csv for more info
 	private readonly Dictionary<int, HashSet<int>> _positionalData = new()
@@ -89,21 +92,13 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		{34612, [52, 54, 66, 70] },				// Hindsting Strike 
 		{34613, [52, 54, 66, 70] },				// Hindsbane Fang 
 		
-		
 		{34621, [9] },					// Hunter's Coil
 		{34622, [9] },					// Swiftskin's Coil
 	};
 	
-	private readonly HashSet<int> _watchedSkills = [
-		56, 66, 88, 2255, 2258, 3554, 3556, 3563, 7481, 7482, 24382, 24383, 25772,
-		34610,
-		34611,
-		34612,
-		34613,
-		34621,
-		34622,
-		
-		36947, // Pouncing Couerl
+	private readonly HashSet<int> _positionalSkills = [
+		56, 66, 79, 88, 2255, 2258, 3554, 3556, 3563, 7481, 7482, 24382, 24383,
+		25772, 34610, 34611, 34612, 34613, 34621, 34622, 36947, 36970, 36971,
 	];
 
 	public DamageInfoPlugin(IDalamudPluginInterface pi)
@@ -123,6 +118,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			gauge = null,
 			bg = null,
 		};
+		_posManager = new PositionalManager();
 
 		DalamudApi.CommandManager.AddHandler("/dmginfo", new CommandInfo(OnCommand)
 		{
@@ -261,6 +257,11 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 				.Add(new TextPayload("You can type /dmginfo to open the settings and disable them if you prefer. Note that damage icons must be enabled in Damage Info to see them."))
 				.Build();
 			DalamudApi.ChatGui.Print(new XivChatEntry() { Message = seStr });
+		}
+
+		if (args == "posload")
+		{
+			_posManager.Reset();
 		}
 	}
 
@@ -466,26 +467,29 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 			// Check if we have data for this action ID.
 			// Then we can check if the p2 is in the expected value set for positional success.
 			var positionalState = PositionalState.Ignore;
-			if (_positionalData.TryGetValue(effectHeader->AnimationId, out var actionPosData))
+			var isPositional = _positionalSkills.Contains(effectHeader->AnimationId);
+			if (isPositional)
 			{
 				positionalState = PositionalState.Failure;
 				for (int i = 0; i < entryCount; i++)
 					if (effectArray[i].type == ActionEffectType.Damage)
-						if (actionPosData.Contains(effectArray[i].param2))
+						if (_posManager.IsPositionalHit(effectHeader->AnimationId, effectArray[i].param2))
 							positionalState = PositionalState.Success;
 			}
 			
-			if (_watchedSkills.Contains(effectHeader->AnimationId))
+			if (isPositional)
 			{
 				for (int i = 0; i < entryCount; i++)
+				{
 					if (effectArray[i].type == ActionEffectType.Damage && sourceId == GetCharacterActorId())
 					{
 						var id = effectHeader->AnimationId;
 						var name = id.ToString();
 						if (_actionToNameDict.TryGetValue(id, out var sheetName))
 							name = $"{sheetName} [{name}]";
-						PrintChat($"Skill {name} param2: {effectArray[i].param2} pos: {positionalState}");
+						PositionalLog($"Action: {name} jobLevel: {GetCurrentLevel()} boostPercent: {effectArray[i].param2} positionalState: {positionalState}");
 					}
+				}
 			}
 			
 			for (int i = 0; i < entryCount; i++)
@@ -511,8 +515,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 					sourceId = sourceId,
 					targetId = target,
 					value = dmg,
-					positionalState = positionalState,
-					// positionalPct = param2,
+					positionalState = positionalState
 				};
 
 				_actionStore.AddEffect(newEffect);
@@ -524,6 +527,11 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		}
 
 		_receiveActionEffectHook.Original(sourceId, sourceCharacter, pos, effectHeader, effectArray, effectTail);
+	}
+
+	private int GetCurrentLevel()
+	{
+		return DalamudApi.ClientState.LocalPlayer?.Level ?? -1;
 	}
 
 	private void AddScreenLogDetour(
@@ -732,15 +740,14 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		}
 	}
 	
-	private void PrintChat(string message)
+	private void PositionalLog(string message)
 	{
-#if DEBUG
-			var seStr = new SeStringBuilder()
-				.AddUiForeground("[DamageInfoPlugin]", 506)
-				.Add(new TextPayload($" {message}."))
-				.Build();
-			DalamudApi.ChatGui.Print(new XivChatEntry { Message = seStr });
-#endif
+		if (!_configuration.PositionalLogEnabled) return;
+		var seStr = new SeStringBuilder()
+			.AddUiForeground("[DamageInfoPlugin]", 506)
+			.Add(new TextPayload($" {message}."))
+			.Build();
+		DalamudApi.ChatGui.Print(new XivChatEntry { Message = seStr });
 	}
 
 	private void PlaySE(int soundId)
