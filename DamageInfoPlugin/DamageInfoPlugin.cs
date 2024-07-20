@@ -564,7 +564,6 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
 				DebugLog(FlyText, $"flytext created: kind: {ftKind} ({(int)kind}), val1: {val1}, val2: {val2}, color: {color:X}, icon: {icon}");
 				DebugLog(FlyText, $"text1: {str1} | text2: {str2}");
-				DalamudApi.ChatGui.Print(new XivChatEntry { Message = $""});
 			}
 
 			var charaId = GetCharacterActorId();
