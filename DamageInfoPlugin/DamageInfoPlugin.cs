@@ -65,7 +65,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	private Dictionary<uint, string> _actionToNameDict;
 	private readonly HashSet<uint> _ignoredCastActions;
 	private ActionEffectStore _actionStore;
-    private readonly Dictionary<uint, string> _petNicknamesDictionary;
+    private readonly Dictionary<ulong, string>? _petNicknamesDictionary;
 
     private readonly PositionalManager _posManager;
 
@@ -76,7 +76,13 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_configuration = LoadConfig();
 		_ui = new PluginUI(_configuration, this);
 		_actionToDamageTypeDict = new Dictionary<uint, DamageType>();
-        _petNicknamesDictionary = DalamudApi.PluginInterface.GetOrCreateData("PetRenamer.GameObjectRenameDict", () => new Dictionary<uint, string>());
+
+		try
+		{
+			_petNicknamesDictionary = DalamudApi.PluginInterface.GetOrCreateData("PetRenamer.GameObjectRenameDict", () => new Dictionary<ulong, string>());
+		}
+		catch { }
+			
 		_actionToNameDict = new Dictionary<uint, string>();
 		_ignoredCastActions = new HashSet<uint>();
         _actionStore = new ActionEffectStore(_configuration);
@@ -407,7 +413,10 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	{
 		var dGameObject = DalamudApi.ObjectTable.SearchById(id);
 		if (dGameObject == null) return SeString.Empty;
-		if (dGameObject.ObjectKind == DObjectKind.BattleNpc && _petNicknamesDictionary.TryGetValue(id, out var name)) return name;
+		if (_petNicknamesDictionary != null)
+		{
+			if (dGameObject.ObjectKind == DObjectKind.BattleNpc && _petNicknamesDictionary.TryGetValue(dGameObject.GameObjectId, out var name)) return name;
+		}
 		return dGameObject.Name;
     }
 
