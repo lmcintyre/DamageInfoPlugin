@@ -464,7 +464,8 @@ namespace DamageInfoPlugin
                         configuration.Save();
                     }
 
-                    if (ImGui.Checkbox("Print Positional Report to Chat", ref printPositionalReport)) {
+                    if (ImGui.Checkbox("Print Positional Report to Chat", ref printPositionalReport)) 
+                    {
                         configuration.PositionalReportEnabled = printPositionalReport;
                         configuration.Save();
                     }

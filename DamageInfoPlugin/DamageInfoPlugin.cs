@@ -261,22 +261,24 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_ui.SettingsVisible = true;
 	}
 	
-	private void OnConditionChanged(ConditionFlag flag, bool value) {
+	private void OnConditionChanged(ConditionFlag flag, bool value) 
+	{
 		if (flag is not ConditionFlag.InCombat) return;
 
 		// Combat has started
-		if (value) {
+		if (value) 
+		{
 			_positionalsHit = 0;
 			_positionalsAttempted = 0;
 		}
 		
 		// Combat has ended
 		else {
-
 			if (_configuration.PositionalReportEnabled) {
 				var percentHit = (float) _positionalsHit / _positionalsAttempted * 100.0f;
 
-				ushort color = percentHit switch {
+				ushort color = percentHit switch 
+				{
 					> 90f => 504,
 					> 80f => 506,
 					> 60f => 500,
@@ -284,7 +286,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 					_ => 1,
 				};
 			
-				DalamudApi.ChatGui.Print(new XivChatEntry {
+				DalamudApi.ChatGui.Print(new XivChatEntry 
+				{
 					Message = new SeStringBuilder()
 						.AddUiForeground("[DamageInfo] ", 506)
 						.AddUiForeground("[Positionals] ", 504)
@@ -501,7 +504,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 						if (_posManager.IsPositionalHit(effectHeader->AnimationId, effectArray[i].param2))
 							positionalState = PositionalState.Success;
 
-				if (positionalState is PositionalState.Success) {
+				if (positionalState is PositionalState.Success) 
+				{
 					_positionalsHit++;
 				}
 
