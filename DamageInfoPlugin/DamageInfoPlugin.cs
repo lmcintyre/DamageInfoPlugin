@@ -274,7 +274,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
         
         // Combat has ended
         else {
-            if (_configuration.PositionalReportEnabled) {
+            if (_configuration.PositionalReportEnabled && _positionalsAttempted > 0) {
                 var percentHit = (float) _positionalsHit / _positionalsAttempted * 100.0f;
 
                 ushort color = percentHit switch 
