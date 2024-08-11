@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Game;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Gui.FlyText;
 using Dalamud.Game.Text;
@@ -68,6 +69,9 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
     private readonly Dictionary<ulong, string>? _petNicknamesDictionary;
 
     private readonly PositionalManager _posManager;
+
+    private int _positionalsHit;
+    private int _positionalsAttempted;
 
 	public DamageInfoPlugin(IDalamudPluginInterface pi)
 	{
@@ -158,6 +162,8 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		DalamudApi.PluginInterface.UiBuilder.Draw += DrawUI;
 		DalamudApi.PluginInterface.UiBuilder.OpenConfigUi += DrawConfigUI;
 
+		DalamudApi.Condition.ConditionChange += OnConditionChanged;
+
 		Fools2023.Initialize(_configuration);
 	}
 
@@ -207,6 +213,10 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_setFocusTargetCastBarHook?.Dispose();
 
 		DalamudApi.FlyTextGui.FlyTextCreated -= OnFlyTextCreated;
+		DalamudApi.Condition.ConditionChange -= OnConditionChanged;
+		
+		DalamudApi.PluginInterface.UiBuilder.Draw -= DrawUI;
+		DalamudApi.PluginInterface.UiBuilder.OpenConfigUi -= DrawConfigUI;
 
 		_actionStore = null;
 		_actionToDamageTypeDict = null;
@@ -249,6 +259,42 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 	private void DrawConfigUI()
 	{
 		_ui.SettingsVisible = true;
+	}
+	
+	private void OnConditionChanged(ConditionFlag flag, bool value) {
+		if (flag is not ConditionFlag.InCombat) return;
+
+		// Combat has started
+		if (value) {
+			_positionalsHit = 0;
+			_positionalsAttempted = 0;
+		}
+		
+		// Combat has ended
+		else {
+
+			if (_configuration.PositionalReportEnabled) {
+				var percentHit = (float) _positionalsHit / _positionalsAttempted * 100.0f;
+
+				ushort color = percentHit switch {
+					> 90f => 504,
+					> 80f => 506,
+					> 60f => 500,
+					<= 50f => 705,
+					_ => 1,
+				};
+			
+				DalamudApi.ChatGui.Print(new XivChatEntry {
+					Message = new SeStringBuilder()
+						.AddUiForeground("[DamageInfo] ", 506)
+						.AddUiForeground("[Positionals] ", 504)
+						.AddText($"Hit {_positionalsHit} / {_positionalsAttempted} ( ")
+						.AddUiForeground($"{percentHit:F1}", color)
+						.AddText("% )")
+						.Build(),
+				});
+			}
+		}
 	}
 
 #region castbar
@@ -454,6 +500,12 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 					if (effectArray[i].type == ActionEffectType.Damage)
 						if (_posManager.IsPositionalHit(effectHeader->AnimationId, effectArray[i].param2))
 							positionalState = PositionalState.Success;
+
+				if (positionalState is PositionalState.Success) {
+					_positionalsHit++;
+				}
+
+				_positionalsAttempted++;
 			}
 			
 			if (isPositional)
