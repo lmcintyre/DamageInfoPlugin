@@ -291,7 +291,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
                     Message = new SeStringBuilder()
                         .AddUiForeground("[DamageInfo] ", 506)
                         .AddUiForeground("[Positionals] ", 504)
-                        .AddText($"Hit {_positionalsHit} / {_positionalsAttempted} ( ")
+                        .AddText($" {_positionalsHit} / {_positionalsAttempted} ( ")
                         .AddUiForeground($"{percentHit:F1}", color)
                         .AddText("% )")
                         .Build(),
