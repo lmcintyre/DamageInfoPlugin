@@ -261,44 +261,44 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 		_ui.SettingsVisible = true;
 	}
 	
-	private void OnConditionChanged(ConditionFlag flag, bool value) 
-	{
-		if (flag is not ConditionFlag.InCombat) return;
+    private void OnConditionChanged(ConditionFlag flag, bool value) 
+    {
+        if (flag is not ConditionFlag.InCombat) return;
 
-		// Combat has started
-		if (value) 
-		{
-			_positionalsHit = 0;
-			_positionalsAttempted = 0;
-		}
-		
-		// Combat has ended
-		else {
-			if (_configuration.PositionalReportEnabled) {
-				var percentHit = (float) _positionalsHit / _positionalsAttempted * 100.0f;
+        // Combat has started
+        if (value) 
+        {
+            _positionalsHit = 0;
+            _positionalsAttempted = 0;
+        }
+        
+        // Combat has ended
+        else {
+            if (_configuration.PositionalReportEnabled) {
+                var percentHit = (float) _positionalsHit / _positionalsAttempted * 100.0f;
 
-				ushort color = percentHit switch 
-				{
-					> 90f => 504,
-					> 80f => 506,
-					> 60f => 500,
-					<= 50f => 705,
-					_ => 1,
-				};
-			
-				DalamudApi.ChatGui.Print(new XivChatEntry 
-				{
-					Message = new SeStringBuilder()
-						.AddUiForeground("[DamageInfo] ", 506)
-						.AddUiForeground("[Positionals] ", 504)
-						.AddText($"Hit {_positionalsHit} / {_positionalsAttempted} ( ")
-						.AddUiForeground($"{percentHit:F1}", color)
-						.AddText("% )")
-						.Build(),
-				});
-			}
-		}
-	}
+                ushort color = percentHit switch 
+                {
+                    > 90f => 504,
+                    > 80f => 506,
+                    > 60f => 500,
+                    <= 50f => 705,
+                    _ => 1,
+                };
+            
+                DalamudApi.ChatGui.Print(new XivChatEntry 
+                {
+                    Message = new SeStringBuilder()
+                        .AddUiForeground("[DamageInfo] ", 506)
+                        .AddUiForeground("[Positionals] ", 504)
+                        .AddText($"Hit {_positionalsHit} / {_positionalsAttempted} ( ")
+                        .AddUiForeground($"{percentHit:F1}", color)
+                        .AddText("% )")
+                        .Build(),
+                });
+            }
+        }
+    }
 
 #region castbar
 	private CastbarInfo GetTargetInfoUiElements()
