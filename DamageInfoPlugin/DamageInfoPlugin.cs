@@ -72,6 +72,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 
     private int _positionalsHit;
     private int _positionalsAttempted;
+    private DateTime _combatStartTime;
 
 	public DamageInfoPlugin(IDalamudPluginInterface pi)
 	{
@@ -270,6 +271,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
         {
             _positionalsHit = 0;
             _positionalsAttempted = 0;
+            _combatStartTime = DateTime.Now;
         }
         
         // Combat has ended
@@ -293,7 +295,7 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
                         .AddUiForeground("[Positionals] ", 504)
                         .AddText($" {_positionalsHit} / {_positionalsAttempted} ( ")
                         .AddUiForeground($"{percentHit:F1}", color)
-                        .AddText("% )")
+                        .AddText($"% ) ( {_combatStartTime - DateTime.Now:mm\\:ss} )")
                         .Build(),
                 });
             }
