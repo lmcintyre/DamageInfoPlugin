@@ -506,12 +506,14 @@ public unsafe class DamageInfoPlugin : IDalamudPlugin
 						if (_posManager.IsPositionalHit(effectHeader->AnimationId, effectArray[i].param2))
 							positionalState = PositionalState.Success;
 
-				if (positionalState is PositionalState.Success) 
-				{
-					_positionalsHit++;
-				}
+				if (DalamudApi.ClientState.LocalPlayer?.EntityId == sourceCharacter->EntityId) {
+					if (positionalState is PositionalState.Success) 
+					{
+						_positionalsHit++;
+					}
 
-				_positionalsAttempted++;
+					_positionalsAttempted++;
+				}
 			}
 			
 			if (isPositional)
