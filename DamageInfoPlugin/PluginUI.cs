@@ -98,6 +98,7 @@ namespace DamageInfoPlugin
                 var missSoundEnabled = configuration.PositionalMissSoundSettings.Enabled;
                 var hitSound = configuration.PositionalHitSoundSettings.SoundId;
                 var missSound = configuration.PositionalMissSoundSettings.SoundId;
+                var printPositionalReport = configuration.PositionalReportEnabled;
 
                 // computed state
                 var colorAllConfigValue = incomingColorConfigValue && outgoingColorConfigValue && petColorConfigValue;
@@ -460,6 +461,12 @@ namespace DamageInfoPlugin
                         if (missSound < 1) missSound = 1;
                         if (missSound > 16) missSound = 16;
                         configuration.PositionalMissSoundSettings.SoundId = missSound;
+                        configuration.Save();
+                    }
+
+                    if (ImGui.Checkbox("Print Positional Report to Chat", ref printPositionalReport)) 
+                    {
+                        configuration.PositionalReportEnabled = printPositionalReport;
                         configuration.Save();
                     }
                 }
